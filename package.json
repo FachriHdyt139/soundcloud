@@ -9,7 +9,7 @@
   "dependencies": {
     "cors": "^2.8.5",
     "express": "^4.19.2",
-    "scdl-core": "^2.1.0",
+    "scdl-core": "latest",
     "socket.io": "^4.7.5"
   }
 }
