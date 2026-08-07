@@ -13,11 +13,23 @@ const io = new Server(server);
 app.use(cors());
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Folder penyimpanan sementara
 const DOWNLOAD_DIR = path.join(__dirname, 'downloads');
 if (!fs.existsSync(DOWNLOAD_DIR)) {
     fs.mkdirSync(DOWNLOAD_DIR, { recursive: true });
 }
+
+// Inisialisasi koneksi awal SoundCloud
+let isScdlConnected = false;
+async function initScdl() {
+    try {
+        await scdl.connect();
+        isScdlConnected = true;
+        console.log('Berhasil terhubung ke SoundCloud API');
+    } catch (err) {
+        console.error('Gagal inisialisasi Client ID SoundCloud:', err);
+    }
+}
+initScdl();
 
 io.on('connection', (socket) => {
     console.log('Client terhubung:', socket.id);
@@ -30,6 +42,12 @@ io.on('connection', (socket) => {
 
             socket.emit('info', 'Mengambil data lagu...');
 
+            // Pastikan Client ID selalu terhubung
+            if (!isScdlConnected) {
+                await scdl.connect();
+                isScdlConnected = true;
+            }
+
             const trackInfo = await scdl.getInfo(url);
             const title = (trackInfo.title || 'SoundCloud_Track').replace(/[^a-zA-Z0-9_\-\s]/g, "");
             const fileName = `${title}_${Date.now()}.mp3`;
@@ -38,7 +56,6 @@ io.on('connection', (socket) => {
             const stream = await scdl.download(url);
             const fileStream = fs.createWriteStream(filePath);
 
-            // Estimasi ukuran file audio (128 kbps)
             const durationSec = (trackInfo.duration || 0) / 1000;
             const estimatedSize = durationSec > 0 ? (128 * 1000 * durationSec) / 8 : 5 * 1024 * 1024;
 
@@ -59,7 +76,6 @@ io.on('connection', (socket) => {
                 const sizeMB = (estimatedSize / (1024 * 1024)).toFixed(2);
                 const downloadedMB = (downloaded / (1024 * 1024)).toFixed(2);
 
-                // Kirim data real-time ke UI frontend
                 socket.emit('progress', {
                     progress,
                     speedMBps,
@@ -88,18 +104,17 @@ io.on('connection', (socket) => {
 
             stream.on('error', (err) => {
                 console.error('Stream error:', err);
-                socket.emit('error', 'Gagal memproses stream audio SoundCloud.');
+                socket.emit('error', 'Gagal memproses lagu (Kemungkinan terblokir SoundCloud).');
                 if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
             });
 
         } catch (error) {
-            console.error('Download error:', error);
-            socket.emit('error', 'Terjadi kesalahan saat mengunduh lagu.');
+            console.error('Download error detail:', error);
+            socket.emit('error', 'Gagal mengambil data lagu. Coba link SoundCloud lain.');
         }
     });
 });
 
-// Endpoint untuk mengirim file ke user lalu OTOMATIS HAPUS dari server
 app.get('/download-file/:filename', (req, res) => {
     const fileName = req.params.filename;
     const filePath = path.join(DOWNLOAD_DIR, fileName);
@@ -107,11 +122,8 @@ app.get('/download-file/:filename', (req, res) => {
     if (fs.existsSync(filePath)) {
         res.download(filePath, fileName, (err) => {
             if (err) console.error("Error sending file:", err);
-            
-            // [AUTO-DELETE]: Langsung hapus file setelah terkirim ke user
             fs.unlink(filePath, (unlinkErr) => {
                 if (unlinkErr) console.error("Gagal menghapus file temp:", unlinkErr);
-                else console.log(`[Auto-Delete] File ${fileName} berhasil dihapus dari server.`);
             });
         });
     } else {
@@ -119,7 +131,6 @@ app.get('/download-file/:filename', (req, res) => {
     }
 });
 
-// Port dinamis untuk Render.com / Localhost
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
     console.log(`Server SoundCloud Downloader aktif pada port ${PORT}`);
