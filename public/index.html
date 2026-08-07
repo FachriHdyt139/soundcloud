@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SoundCloud Downloader Pro - @FACHRI_HDYT</title>
+    <link rel="stylesheet" href="style.css">
+    <!-- Font Awesome & Google Fonts -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+
+    <!-- Watermark Background -->
+    <div class="watermark-bg">@FACHRI_HDYT</div>
+
+    <div class="container">
+        <div class="glass-card">
+            <div class="header">
+                <i class="fab fa-soundcloud logo-icon"></i>
+                <h1>SoundCloud Downloader</h1>
+                <p>Unduh lagu favoritmu secara praktis & gratis</p>
+            </div>
+
+            <div class="input-group">
+                <input type="text" id="sc-url" placeholder="Paste link SoundCloud di sini..." autocomplete="off">
+                <button id="btn-download" onclick="startDownload()">
+                    <i class="fas fa-download"></i> Unduh Now
+                </button>
+            </div>
+
+            <div id="status-message" class="status"></div>
+
+            <!-- Progress Section -->
+            <div id="progress-container" class="progress-container hidden">
+                <h3 id="track-title" class="track-title">Menyiapkan...</h3>
+                
+                <div class="progress-bar-bg">
+                    <div id="progress-bar" class="progress-bar-fill"></div>
+                </div>
+
+                <div class="stats">
+                    <div class="stat-box">
+                        <i class="fas fa-bolt"></i>
+                        <span id="speed">0.00 MB/s</span>
+                    </div>
+                    <div class="stat-box">
+                        <i class="fas fa-hourglass-half"></i>
+                        <span id="eta">0s tersisa</span>
+                    </div>
+                    <div class="stat-box">
+                        <i class="fas fa-hard-drive"></i>
+                        <span id="size">0 / 0 MB</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Footer Watermark -->
+    <footer>
+        <p>Created with <i class="fas fa-heart" style="color: #ff5500;"></i> by <strong>@FACHRI_HDYT</strong></p>
+    </footer>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="script.js"></script>
+</body>
+</html>
