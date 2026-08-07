@@ -36,9 +36,12 @@ io.on('connection', (socket) => {
 
     socket.on('start_download', async (url) => {
         try {
-            if (!url || !scdl.isValidUrl(url)) {
-                return socket.emit('error', 'URL SoundCloud tidak valid!');
-            }
+            // Regex untuk validasi URL SoundCloud (Termasuk link pendek on.soundcloud.com)
+const scRegex = /^(https?:\/\/)?(www\.)?(soundcloud\.com|on\.soundcloud\.com)\/.+$/;
+
+if (!url || !scRegex.test(url)) {
+    return socket.emit('error', 'URL SoundCloud tidak valid!');
+}
 
             socket.emit('info', 'Mengambil data lagu...');
 
