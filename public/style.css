@@ -6,8 +6,8 @@
 }
 
 body {
-    /* Background Anime Moving (GIF Aesthetic) */
-    background: url('https://i.pinimg.com/originals/3d/8a/a5/3d8aa5ec123d4e680a6b5795af5bbde0.gif') no-repeat center center fixed;
+    /* Gunakan link GIF Anime yang aman untuk domain luar */
+    background: url('https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExcDFuZXJzOGFudnhubXUzNXlyc2EwbzhvczExbXp2Z3U1eHptdm02OCZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/L13y324dc23T1g7J4C/giphy.gif') no-repeat center center fixed;
     background-size: cover;
     min-height: 100vh;
     display: flex;
