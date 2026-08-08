@@ -2,7 +2,6 @@ const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
 const scdl = require('soundcloud-downloader').default;
-const ytdl = require('@distube/ytdl-core');
 const fs = require('fs');
 const path = require('path');
 const cors = require('cors');
@@ -104,63 +103,76 @@ io.on('connection', (socket) => {
 
             } 
             // ==========================================
-            // CASE 2: YOUTUBE DOWNLOADER (MURNI YTDL-CORE)
+            // CASE 2: YOUTUBE DOWNLOADER (VIA COBALT API)
             // ==========================================
             else if (url.includes('youtube.com') || url.includes('youtu.be')) {
-                socket.emit('info', 'Menghubungkan ke YouTube...');
+                socket.emit('info', 'Menghubungkan ke server YouTube...');
+                socket.emit('progress', { progress: 30, speedMBps: "2.00", etaSec: "3", title: "YouTube Audio" });
 
-                if (!ytdl.validateURL(url)) {
-                    return socket.emit('error', 'Link YouTube tidak valid.');
+                // Request ke Cobalt API untuk mengambil direct link audio YouTube
+                const cobaltRes = await fetch('https://api.cobalt.tools/api/json', {
+                    method: 'POST',
+                    headers: {
+                        'Accept': 'application/json',
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        url: url,
+                        downloadMode: 'audio',
+                        audioFormat: 'mp3'
+                    })
+                });
+
+                const cobaltData = await cobaltRes.json();
+
+                if (!cobaltRes.ok || !cobaltData.url) {
+                    return socket.emit('error', 'Gagal memproses YouTube. Link mungkin privat atau dibatasi.');
                 }
 
-                socket.emit('info', 'Mengambil informasi video...');
-                const info = await ytdl.getInfo(url);
-                const title = (info.videoDetails.title || 'YouTube_Audio').replace(/[^a-zA-Z0-9_\-\s]/g, "").trim();
+                const audioDownloadUrl = cobaltData.url;
+                const title = (cobaltData.filename || 'YouTube_Audio').replace(/[^a-zA-Z0-9_\-\s]/g, "").trim();
                 const fileName = `${title}_${Date.now()}.mp3`;
                 filePath = path.join(DOWNLOAD_DIR, fileName);
 
-                socket.emit('info', `Mengunduh: ${title}...`);
+                socket.emit('info', `Mengunduh file audio...`);
 
-                // Mengambil stream audio kualitas terbaik langsung dari YouTube
-                const audioStream = ytdl(url, { quality: 'highestaudiofilter' });
+                // Download file ke server lokal kita
+                const audioRes = await fetch(audioDownloadUrl);
                 const fileStream = fs.createWriteStream(filePath);
-
-                // Estimasi ukuran berdasarkan durasi video
-                const durationSec = parseInt(info.videoDetails.lengthSeconds || '180');
-                const estimatedSize = (128 * 1000 * durationSec) / 8;
+                
+                const totalLength = parseInt(audioRes.headers.get('content-length') || '5000000');
                 let downloaded = 0;
                 const startTime = Date.now();
 
-                audioStream.on('data', (chunk) => {
-                    downloaded += chunk.length;
+                const reader = audioRes.body.getReader();
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+                    
+                    fileStream.write(value);
+                    downloaded += value.length;
+
                     const elapsedTime = (Date.now() - startTime) / 1000 || 0.001;
                     const speedBps = downloaded / elapsedTime;
                     const speedMBps = (speedBps / (1024 * 1024)).toFixed(2);
-                    const progress = Math.min((downloaded / estimatedSize) * 100, 99).toFixed(1);
-                    const remainingBytes = estimatedSize - downloaded;
-                    const etaSec = remainingBytes > 0 && speedBps > 0 ? (remainingBytes / speedBps).toFixed(0) : 0;
+                    const progress = Math.min((downloaded / totalLength) * 100, 99).toFixed(1);
+                    const etaSec = ((totalLength - downloaded) / speedBps).toFixed(0);
 
                     socket.emit('progress', {
                         progress, speedMBps, etaSec,
                         downloadedMB: (downloaded / (1024 * 1024)).toFixed(2),
-                        sizeMB: (estimatedSize / (1024 * 1024)).toFixed(2),
+                        sizeMB: (totalLength / (1024 * 1024)).toFixed(2),
                         title
                     });
-                });
+                }
 
-                audioStream.pipe(fileStream);
+                fileStream.end();
 
                 fileStream.on('finish', () => {
                     totalDownloads++;
                     io.emit('update_counter', { totalDownloads });
                     socket.emit('progress', { progress: 100, speedMBps: "0.00", etaSec: 0, title });
                     socket.emit('done', { downloadUrl: `/download-file/${encodeURIComponent(fileName)}`, fileName });
-                });
-
-                audioStream.on('error', (err) => {
-                    console.error('⚠️ Stream Error:', err);
-                    socket.emit('error', 'Gagal mengunduh audio YouTube.');
-                    if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
                 });
 
             } else {
@@ -193,5 +205,5 @@ app.get('/download-file/:filename', (req, res) => {
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
-    console.log(`🚀 Server Native YTDL aktif di port ${PORT}`);
+    console.log(`🚀 Server Cobalt Bridge aktif di port ${PORT}`);
 });
