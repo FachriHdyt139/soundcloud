@@ -4,10 +4,12 @@ const { Server } = require('socket.io');
 const fs = require('fs');
 const path = require('path');
 const cors = require('cors');
+const SoundCloud = require("soundcloud-scraper");
 
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
+const sc = new SoundCloud.Client();
 
 app.use(cors());
 app.use(express.static(path.join(__dirname, 'public')));
@@ -17,7 +19,7 @@ if (!fs.existsSync(DOWNLOAD_DIR)) {
     fs.mkdirSync(DOWNLOAD_DIR, { recursive: true });
 }
 
-let totalDownloads = 1256;
+let totalDownloads = 1257;
 
 app.get('/api/stats', (req, res) => {
     res.json({ totalDownloads });
@@ -38,92 +40,58 @@ io.on('connection', (socket) => {
             if (platform === 'soundcloud') {
                 socket.emit('info', 'Memproses link SoundCloud...');
                 
-                let downloadSourceUrl = '';
-                let title = 'SoundCloud Audio';
-                let coverUrl = 'https://images.unsplash.com/photo-1611162617474-5b21e879e113';
+                const songData = await sc.getSongInfo(url).catch(err => {
+                    console.error("SC Scraper Error:", err);
+                    return null;
+                });
 
-                // Menggunakan Cobalt API yang stabil untuk SoundCloud
-                try {
-                    const cobaltRes = await fetch('https://api.cobalt.tools/api/json', {
-                        method: 'POST',
-                        headers: {
-                            'Accept': 'application/json',
-                            'Content-Type': 'application/json',
-                            'User-Agent': 'Mozilla/5.0'
-                        },
-                        body: JSON.stringify({ 
-                            url: url, 
-                            isAudioOnly: true,
-                            filenamePattern: 'classic'
-                        })
-                    });
-                    
-                    const cobaltJson = await cobaltRes.json();
-                    if (cobaltJson && (cobaltJson.url || cobaltJson.picker)) {
-                        downloadSourceUrl = cobaltJson.url || (cobaltJson.picker[0] && cobaltJson.picker[0].url);
-                        if (cobaltJson.filename) title = cobaltJson.filename;
-                    }
-                } catch (e) {
-                    console.error("Cobalt API Error:", e);
-                }
-
-                // Fallback jika Cobalt gagal
-                if (!downloadSourceUrl) {
-                    try {
-                        const altRes = await fetch(`https://api.soundcloud.mp3download.to/get?url=${encodeURIComponent(url)}`);
-                        const altJson = await altRes.json();
-                        if (altJson && altJson.download_url) {
-                            downloadSourceUrl = altJson.download_url;
-                            if (altJson.title) title = altJson.title;
-                            if (altJson.cover) coverUrl = altJson.cover;
-                        }
-                    } catch (e) {
-                        console.error("Fallback API Error:", e);
-                    }
-                }
-
-                if (!downloadSourceUrl) {
+                if (!songData || !songData.url) {
                     return socket.emit('error', 'Gagal mengambil audio SoundCloud. Pastikan link publik.');
                 }
 
+                const title = songData.title || 'SoundCloud Audio';
+                const coverUrl = songData.thumbnail || 'https://images.unsplash.com/photo-1611162617474-5b21e879e113';
+                
                 socket.emit('preview', { title: title.substring(0, 40), coverUrl });
+
+                const stream = await sc.downloadTrack(url).catch(() => null);
+                if (!stream) {
+                    return socket.emit('error', 'Gagal mengunduh stream audio SoundCloud.');
+                }
 
                 const cleanTitle = title.replace(/[^a-zA-Z0-9_\-\s]/g, "");
                 const fileName = `soundcloud_${cleanTitle}_${Date.now()}.mp3`;
                 filePath = path.join(DOWNLOAD_DIR, fileName);
 
-                socket.emit('info', 'Mengunduh file SoundCloud...');
-                const mediaRes = await fetch(downloadSourceUrl);
-                if (!mediaRes.ok) return socket.emit('error', 'Gagal mengunduh file media.');
-
+                socket.emit('info', 'Menyimpan file SoundCloud...');
                 const fileStream = fs.createWriteStream(filePath);
-                const totalLength = parseInt(mediaRes.headers.get('content-length') || '5000000');
+                
+                stream.pipe(fileStream);
+
                 let downloaded = 0;
                 const startTime = Date.now();
 
-                const reader = mediaRes.body.getReader();
-                while (true) {
-                    const { done, value } = await reader.read();
-                    if (done) break;
-                    
-                    fileStream.write(value);
-                    downloaded += value.length;
-
+                stream.on('data', (chunk) => {
+                    downloaded += chunk.length;
                     const elapsedTime = (Date.now() - startTime) / 1000 || 0.001;
                     const speedBps = downloaded / elapsedTime;
                     const speedMBps = (speedBps / (1024 * 1024)).toFixed(2);
-                    const progress = Math.min((downloaded / totalLength) * 100, 99).toFixed(1);
-                    const etaSec = ((totalLength - downloaded) / speedBps).toFixed(0);
+                    const progress = Math.min((downloaded / 10000000) * 100, 95).toFixed(1);
+                    const etaSec = 5;
 
                     socket.emit('progress', { progress, speedMBps, etaSec, title });
-                }
+                });
 
-                fileStream.end();
                 fileStream.on('finish', () => {
                     totalDownloads++;
                     io.emit('update_counter', { totalDownloads });
                     socket.emit('progress', { progress: 100, speedMBps: "0.00", etaSec: 0, title });
                     socket.emit('done', { downloadUrl: `/download-file/${encodeURIComponent(fileName)}`, fileName, title, coverUrl });
+                });
+
+                stream.on('error', (err) => {
+                    console.error("Stream error:", err);
+                    socket.emit('error', 'Terjadi kesalahan saat mengunduh stream.');
                 });
             } 
             // ==========================================
