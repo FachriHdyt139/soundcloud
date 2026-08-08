@@ -27,7 +27,7 @@ app.get('/api/stats', (req, res) => {
 io.on('connection', (socket) => {
     console.log('Client terhubung:', socket.id);
 
-    socket.on('start_download', async ({ url, inputUrl, platform, format }) => {
+    socket.on('start_download', async ({ url, platform }) => {
         let filePath = '';
 
         try {
@@ -40,26 +40,24 @@ io.on('connection', (socket) => {
             }
 
             // ==========================================
-            // 1. SOUNDCLOUD DOWNLOADER (Fix Short Link & Direct Stream)
+            // 1. SOUNDCLOUD
             // ==========================================
             if (platform === 'soundcloud') {
                 socket.emit('info', 'Memproses link SoundCloud...');
                 
                 let resolvedUrl = url;
-                
-                // Jika menggunakan link pendek on.soundcloud.com, ambil URL aslinya dari redirect header
                 if (url.includes('on.soundcloud.com')) {
                     try {
                         const response = await fetch(url, { redirect: 'follow' });
                         resolvedUrl = response.url;
                     } catch (e) {
-                        console.error('Gagal resolve redirect SoundCloud:', e);
+                        console.error('Gagal resolve redirect:', e);
                     }
                 }
 
                 const trackInfo = await scdl.getInfo(resolvedUrl).catch(() => null);
                 if (!trackInfo) {
-                    return socket.emit('error', 'Gagal memproses link SoundCloud. Pastikan link benar.');
+                    return socket.emit('error', 'Gagal memproses link SoundCloud.');
                 }
 
                 const title = (trackInfo.title || 'SoundCloud Audio').substring(0, 40).trim();
@@ -97,14 +95,9 @@ io.on('connection', (socket) => {
                     socket.emit('progress', { progress: 100, speedMBps: "0.00", etaSec: 0, title });
                     socket.emit('done', { downloadUrl: `/download-file/${encodeURIComponent(fileName)}`, fileName, title, coverUrl });
                 });
-
-                stream.on('error', (err) => {
-                    console.error('Error stream SoundCloud:', err);
-                    socket.emit('error', 'Gagal mengunduh file SoundCloud.');
-                });
             } 
             // ==========================================
-            // 2. TIKTOK DOWNLOADER (Super Stabil via TikWM)
+            // 2. TIKTOK
             // ==========================================
             else if (platform === 'tiktok') {
                 socket.emit('info', 'Memproses link TikTok...');
@@ -113,7 +106,7 @@ io.on('connection', (socket) => {
                 const resJson = await apiRes.json();
 
                 if (!resJson || !resJson.data || !resJson.data.play) {
-                    return socket.emit('error', 'Gagal mengambil video TikTok. Coba link lain.');
+                    return socket.emit('error', 'Gagal mengambil video TikTok.');
                 }
 
                 const downloadSourceUrl = resJson.data.play;
@@ -130,7 +123,7 @@ io.on('connection', (socket) => {
                 const mediaRes = await fetch(downloadSourceUrl);
                 
                 if (!mediaRes.ok) {
-                    return socket.emit('error', 'Gagal menyambung ke server video TikTok.');
+                    return socket.emit('error', 'Gagal menyambung ke server video.');
                 }
 
                 const fileStream = fs.createWriteStream(filePath);
@@ -162,13 +155,11 @@ io.on('connection', (socket) => {
                     socket.emit('progress', { progress: 100, speedMBps: "0.00", etaSec: 0, title });
                     socket.emit('done', { downloadUrl: `/download-file/${encodeURIComponent(fileName)}`, fileName, title, coverUrl });
                 });
-            } else {
-                socket.emit('error', 'Platform ini tidak didukung.');
             }
 
         } catch (error) {
-            console.error('Error sistem:', error);
-            socket.emit('error', 'Terjadi kesalahan internal pada server.');
+            console.error('Error:', error);
+            socket.emit('error', 'Terjadi kesalahan internal.');
             if (filePath && fs.existsSync(filePath)) fs.unlinkSync(filePath);
         }
     });
@@ -180,13 +171,11 @@ app.get('/download-file/:filename', (req, res) => {
 
     if (fs.existsSync(filePath)) {
         res.download(filePath, (err) => {
-            if (err) console.error("Error mengirim file:", err);
-            fs.unlink(filePath, (unlinkErr) => {
-                if (unlinkErr) console.error("Gagal menghapus file temp:", unlinkErr);
-            });
+            if (err) console.error("Error:", err);
+            fs.unlink(filePath, () => {});
         });
     } else {
-        res.status(404).send('File sudah kadaluarsa atau tidak ditemukan.');
+        res.status(404).send('File tidak ditemukan.');
     }
 });
 
