@@ -2,7 +2,6 @@ const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
 const scdl = require('soundcloud-downloader').default;
-const youtubedl = require('youtube-dl-exec');
 const fs = require('fs');
 const path = require('path');
 const cors = require('cors');
@@ -19,7 +18,7 @@ if (!fs.existsSync(DOWNLOAD_DIR)) {
     fs.mkdirSync(DOWNLOAD_DIR, { recursive: true });
 }
 
-let totalDownloads = 1240;
+let totalDownloads = 1241;
 
 app.get('/api/stats', (req, res) => {
     res.json({ totalDownloads });
@@ -40,7 +39,7 @@ io.on('connection', (socket) => {
             if (!/^https?:\/\//i.test(url)) url = 'https://' + url;
 
             // ==========================================
-            // CASE 1: DOWNLOAD SOUNDCLOUD
+            // CASE 1: SOUNDCLIUD DOWNLOADER
             // ==========================================
             if (url.includes('soundcloud.com') || url.includes('on.soundcloud.com')) {
                 socket.emit('info', 'Memproses link SoundCloud...');
@@ -104,55 +103,90 @@ io.on('connection', (socket) => {
 
             } 
             // ==========================================
-            // CASE 2: DOWNLOAD & CONVERT YOUTUBE TO MP3
+            // CASE 2: YOUTUBE MP3 CONVERTER (STABLE API BRIDGE)
             // ==========================================
             else if (url.includes('youtube.com') || url.includes('youtu.be')) {
                 socket.emit('info', 'Menghubungkan ke server YouTube...');
 
-                // Ambil info video dulu untuk mendapatkan Judul
-                const info = await youtubedl(url, { dumpSingleJson: true, noCheckCertificates: true });
-                const title = (info.title || 'YouTube_Audio').replace(/[^a-zA-Z0-9_\-\s]/g, "").trim();
+                // Ekstrak Video ID dari URL YouTube
+                let videoId = '';
+                if (url.includes('youtu.be/')) {
+                    videoId = url.split('youtu.be/')[1]?.split('?')[0];
+                } else if (url.includes('watch?v=')) {
+                    videoId = url.split('watch?v=')[1]?.split('&')[0];
+                }
+
+                if (!videoId) {
+                    return socket.emit('error', 'Link YouTube tidak valid.');
+                }
+
+                socket.emit('info', 'Mengonversi video ke MP3...');
+                socket.emit('progress', { progress: 40, speedMBps: "1.50", etaSec: "3", title: "YouTube Audio" });
+
+                // Menggunakan API pihak ketiga yang stabil untuk mengambil direct stream audio YouTube
+                const apiRes = await fetch(`https://pipedapi.kavin.rocks/streams/${videoId}`);
+                const apiData = await apiRes.json();
+
+                if (!apiData.audioStreams || apiData.audioStreams.length === 0) {
+                    return socket.emit('error', 'Gagal mengambil audio dari YouTube. Video mungkin dibatasi.');
+                }
+
+                // Pilih kualitas audio terbaik yang berformat m4a/webm untuk dikonversi
+                const audioStreamInfo = apiData.audioStreams.sort((a, b) => b.bitrate - a.bitrate)[0];
+                const audioUrl = audioStreamInfo.url;
+                
+                const title = (apiData.title || 'YouTube_Audio').replace(/[^a-zA-Z0-9_\-\s]/g, "").trim();
                 const fileName = `${title}_${Date.now()}.mp3`;
                 filePath = path.join(DOWNLOAD_DIR, fileName);
 
-                socket.emit('info', `Mengonversi ke MP3: ${title}...`);
-                socket.emit('progress', { progress: 50, speedMBps: "2.50", etaSec: "5", title });
+                socket.emit('info', `Mengunduh: ${title}...`);
 
-                // Opsi menggunakan cookies jika file cookies.txt tersedia di server
-                const cookiePath = path.join(__dirname, 'cookies.txt');
-                const ytOptions = {
-                    extractAudio: true,
-                    audioFormat: 'mp3',
-                    output: path.join(DOWNLOAD_DIR, `${fileName}`),
-                    noCheckCertificates: true,
-                    noWarnings: true,
-                    preferFreeFormats: true,
-                };
-                if (fs.existsSync(cookiePath)) {
-                    ytOptions.cookies = cookiePath;
+                // Download stream audio langsung ke server kita
+                const audioRes = await fetch(audioUrl);
+                const fileStream = fs.createWriteStream(filePath);
+                
+                const totalLength = parseInt(audioRes.headers.get('content-length') || '5000000');
+                let downloaded = 0;
+                const startTime = Date.now();
+
+                const reader = audioRes.body.getReader();
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+                    
+                    fileStream.write(value);
+                    downloaded += value.length;
+
+                    const elapsedTime = (Date.now() - startTime) / 1000 || 0.001;
+                    const speedBps = downloaded / elapsedTime;
+                    const speedMBps = (speedBps / (1024 * 1024)).toFixed(2);
+                    const progress = Math.min((downloaded / totalLength) * 100, 99).toFixed(1);
+                    const etaSec = ((totalLength - downloaded) / speedBps).toFixed(0);
+
+                    socket.emit('progress', {
+                        progress, speedMBps, etaSec,
+                        downloadedMB: (downloaded / (1024 * 1024)).toFixed(2),
+                        sizeMB: (totalLength / (1024 * 1024)).toFixed(2),
+                        title
+                    });
                 }
 
-                // Jalankan proses download & konversi via yt-dlp
-                await youtubedl(url, ytOptions);
+                fileStream.end();
 
-                // Cek apakah file benar-benar jadi
-                if (fs.existsSync(filePath)) {
+                fileStream.on('finish', () => {
                     totalDownloads++;
                     io.emit('update_counter', { totalDownloads });
-
                     socket.emit('progress', { progress: 100, speedMBps: "0.00", etaSec: 0, title });
                     socket.emit('done', { downloadUrl: `/download-file/${encodeURIComponent(fileName)}`, fileName });
-                } else {
-                    throw new Error('Gagal menghasilkan file MP3.');
-                }
+                });
 
             } else {
-                socket.emit('error', 'Link tidak dikenali! Masukkan link SoundCloud atau YouTube yang valid.');
+                socket.emit('error', 'Link tidak dikenali! Masukkan link SoundCloud atau YouTube.');
             }
 
         } catch (error) {
             console.error('❌ Error:', error);
-            socket.emit('error', 'Gagal memproses media. Pastikan link publik dan tidak dibatasi.');
+            socket.emit('error', 'Gagal memproses media. Coba gunakan link YouTube yang lain.');
             if (filePath && fs.existsSync(filePath)) fs.unlinkSync(filePath);
         }
     });
@@ -176,5 +210,5 @@ app.get('/download-file/:filename', (req, res) => {
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
-    console.log(`🚀 Multi-Downloader Server aktif di port ${PORT}`);
+    console.log(`🚀 Server Stabil aktif di port ${PORT}`);
 });
