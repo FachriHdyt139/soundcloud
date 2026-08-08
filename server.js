@@ -20,7 +20,6 @@ if (!fs.existsSync(DOWNLOAD_DIR)) {
 
 let totalDownloads = 1255;
 
-// Tempel kunci RapidAPI Anda di sini (atau biarkan membaca dari environment variable Render)
 const RAPID_API_KEY = process.env.RAPID_API_KEY || '4ae8cf984dmshddf06cb87ec7b8ep19e86...'; 
 
 app.get('/api/stats', (req, res) => {
@@ -161,15 +160,14 @@ io.on('connection', (socket) => {
 
             } 
             // ==========================================
-            // 3. INSTAGRAM & YOUTUBE (Menggunakan RapidAPI Anda)
+            // 3. INSTAGRAM & YOUTUBE (Diperbarui dengan Query URL)
             // ==========================================
             else if (platform === 'instagram' || platform === 'youtube') {
                 socket.emit('info', `Menghubungkan ke API ${platform.toUpperCase()}...`);
                 
                 const apiHost = 'all-media-downloader4.p.rapidapi.com';
-                const endpointUrl = platform === 'youtube' 
-                    ? `https://${apiHost}/api/youtube/download?id=${encodeURIComponent(url)}`
-                    : `https://${apiHost}/api/instagram/download?url=${encodeURIComponent(url)}`;
+                // Menggunakan parameter url universal agar cocok dengan endpoint RapidAPI
+                const endpointUrl = `https://${apiHost}/api/${platform}/download?url=${encodeURIComponent(url)}`;
 
                 const apiRes = await fetch(endpointUrl, {
                     method: 'GET',
