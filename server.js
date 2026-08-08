@@ -2,6 +2,7 @@ const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
 const scdl = require('soundcloud-downloader').default;
+const youtubedl = require('youtube-dl-exec');
 const fs = require('fs');
 const path = require('path');
 const cors = require('cors');
@@ -18,26 +19,11 @@ if (!fs.existsSync(DOWNLOAD_DIR)) {
     fs.mkdirSync(DOWNLOAD_DIR, { recursive: true });
 }
 
-// Live Counter Global (Disimpan di memori server)
-let totalDownloads = 1240; // Angka awal fiktif agar langsung ramai
+let totalDownloads = 1240;
 
-// Endpoint API untuk mengecek statistik download secara live
 app.get('/api/stats', (req, res) => {
     res.json({ totalDownloads });
 });
-
-async function getRealUrl(inputUrl) {
-    let finalUrl = inputUrl;
-    if (finalUrl.includes('on.soundcloud.com')) {
-        try {
-            const response = await fetch(finalUrl, { method: 'GET', redirect: 'follow' });
-            finalUrl = response.url;
-        } catch (err) {
-            throw new Error("Gagal membaca shortlink.");
-        }
-    }
-    return finalUrl.replace('m.soundcloud.com', 'soundcloud.com').split('?')[0];
-}
 
 io.on('connection', (socket) => {
     console.log('🔗 Client terhubung:', socket.id);
@@ -50,77 +36,123 @@ io.on('connection', (socket) => {
                 return socket.emit('error', 'URL tidak boleh kosong!');
             }
 
-            socket.emit('info', 'Memverifikasi link SoundCloud...');
-
             let url = inputUrl.trim();
             if (!/^https?:\/\//i.test(url)) url = 'https://' + url;
 
-            const finalUrl = await getRealUrl(url);
-
-            if (!scdl.isValidUrl(finalUrl)) {
-                return socket.emit('error', 'Format URL tidak valid. Pastikan itu link lagu SoundCloud.');
-            }
-
-            socket.emit('info', 'Mengambil metadata lagu...');
-
-            const trackInfo = await scdl.getInfo(finalUrl);
-            if (!trackInfo || !trackInfo.title) {
-                return socket.emit('error', 'Lagu tidak ditemukan atau diset Private.');
-            }
-
-            const title = trackInfo.title.replace(/[^a-zA-Z0-9_\-\s]/g, "").trim();
-            const fileName = `${title}_${Date.now()}.mp3`;
-            filePath = path.join(DOWNLOAD_DIR, fileName);
-
-            socket.emit('info', `Mengunduh: ${title}...`);
-
-            const stream = await scdl.downloadFormat(finalUrl, scdl.FORMATS.MP3);
-            const fileStream = fs.createWriteStream(filePath);
-
-            const durationSec = (trackInfo.duration || 0) / 1000;
-            const estimatedSize = durationSec > 0 ? (128 * 1000 * durationSec) / 8 : 5 * 1024 * 1024;
-
-            let downloaded = 0;
-            const startTime = Date.now();
-
-            stream.on('data', (chunk) => {
-                downloaded += chunk.length;
-                const elapsedTime = (Date.now() - startTime) / 1000 || 0.001;
+            // ==========================================
+            // CASE 1: DOWNLOAD SOUNDCLOUD
+            // ==========================================
+            if (url.includes('soundcloud.com') || url.includes('on.soundcloud.com')) {
+                socket.emit('info', 'Memproses link SoundCloud...');
                 
-                const speedBps = downloaded / elapsedTime;
-                const speedMBps = (speedBps / (1024 * 1024)).toFixed(2);
-                const progress = Math.min((downloaded / estimatedSize) * 100, 99).toFixed(1);
-                const remainingBytes = estimatedSize - downloaded;
-                const etaSec = remainingBytes > 0 && speedBps > 0 ? (remainingBytes / speedBps).toFixed(0) : 0;
-                
-                const sizeMB = (estimatedSize / (1024 * 1024)).toFixed(2);
-                const downloadedMB = (downloaded / (1024 * 1024)).toFixed(2);
+                let finalUrl = url;
+                if (finalUrl.includes('on.soundcloud.com')) {
+                    const response = await fetch(finalUrl, { method: 'GET', redirect: 'follow' });
+                    finalUrl = response.url;
+                }
+                finalUrl = finalUrl.replace('m.soundcloud.com', 'soundcloud.com').split('?')[0];
 
-                socket.emit('progress', {
-                    progress, speedMBps, etaSec, downloadedMB, sizeMB, title
+                if (!scdl.isValidUrl(finalUrl)) {
+                    return socket.emit('error', 'Format URL SoundCloud tidak valid.');
+                }
+
+                socket.emit('info', 'Mengambil metadata lagu...');
+                const trackInfo = await scdl.getInfo(finalUrl);
+                const title = (trackInfo.title || 'SoundCloud_Audio').replace(/[^a-zA-Z0-9_\-\s]/g, "").trim();
+                const fileName = `${title}_${Date.now()}.mp3`;
+                filePath = path.join(DOWNLOAD_DIR, fileName);
+
+                socket.emit('info', `Mengunduh: ${title}...`);
+                const stream = await scdl.downloadFormat(finalUrl, scdl.FORMATS.MP3);
+                const fileStream = fs.createWriteStream(filePath);
+
+                const durationSec = (trackInfo.duration || 0) / 1000;
+                const estimatedSize = durationSec > 0 ? (128 * 1000 * durationSec) / 8 : 5 * 1024 * 1024;
+                let downloaded = 0;
+                const startTime = Date.now();
+
+                stream.on('data', (chunk) => {
+                    downloaded += chunk.length;
+                    const elapsedTime = (Date.now() - startTime) / 1000 || 0.001;
+                    const speedBps = downloaded / elapsedTime;
+                    const speedMBps = (speedBps / (1024 * 1024)).toFixed(2);
+                    const progress = Math.min((downloaded / estimatedSize) * 100, 99).toFixed(1);
+                    const remainingBytes = estimatedSize - downloaded;
+                    const etaSec = remainingBytes > 0 && speedBps > 0 ? (remainingBytes / speedBps).toFixed(0) : 0;
+                    
+                    socket.emit('progress', {
+                        progress, speedMBps, etaSec,
+                        downloadedMB: (downloaded / (1024 * 1024)).toFixed(2),
+                        sizeMB: (estimatedSize / (1024 * 1024)).toFixed(2),
+                        title
+                    });
                 });
-            });
 
-            stream.pipe(fileStream);
+                stream.pipe(fileStream);
 
-            fileStream.on('finish', () => {
-                totalDownloads++; // Tambah counter global
-                io.emit('update_counter', { totalDownloads }); // Broadcast ke semua user
-
-                socket.emit('progress', { progress: 100, speedMBps: "0.00", etaSec: 0, title });
-                socket.emit('done', {
-                    downloadUrl: `/download-file/${encodeURIComponent(fileName)}`,
-                    fileName
+                fileStream.on('finish', () => {
+                    totalDownloads++;
+                    io.emit('update_counter', { totalDownloads });
+                    socket.emit('progress', { progress: 100, speedMBps: "0.00", etaSec: 0, title });
+                    socket.emit('done', { downloadUrl: `/download-file/${encodeURIComponent(fileName)}`, fileName });
                 });
-            });
 
-            stream.on('error', (err) => {
-                socket.emit('error', 'Terjadi kesalahan saat memproses audio SoundCloud.');
-                if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
-            });
+                stream.on('error', () => {
+                    socket.emit('error', 'Gagal memproses audio SoundCloud.');
+                    if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+                });
+
+            } 
+            // ==========================================
+            // CASE 2: DOWNLOAD & CONVERT YOUTUBE TO MP3
+            // ==========================================
+            else if (url.includes('youtube.com') || url.includes('youtu.be')) {
+                socket.emit('info', 'Menghubungkan ke server YouTube...');
+
+                // Ambil info video dulu untuk mendapatkan Judul
+                const info = await youtubedl(url, { dumpSingleJson: true, noCheckCertificates: true });
+                const title = (info.title || 'YouTube_Audio').replace(/[^a-zA-Z0-9_\-\s]/g, "").trim();
+                const fileName = `${title}_${Date.now()}.mp3`;
+                filePath = path.join(DOWNLOAD_DIR, fileName);
+
+                socket.emit('info', `Mengonversi ke MP3: ${title}...`);
+                socket.emit('progress', { progress: 50, speedMBps: "2.50", etaSec: "5", title });
+
+                // Opsi menggunakan cookies jika file cookies.txt tersedia di server
+                const cookiePath = path.join(__dirname, 'cookies.txt');
+                const ytOptions = {
+                    extractAudio: true,
+                    audioFormat: 'mp3',
+                    output: path.join(DOWNLOAD_DIR, `${fileName}`),
+                    noCheckCertificates: true,
+                    noWarnings: true,
+                    preferFreeFormats: true,
+                };
+                if (fs.existsSync(cookiePath)) {
+                    ytOptions.cookies = cookiePath;
+                }
+
+                // Jalankan proses download & konversi via yt-dlp
+                await youtubedl(url, ytOptions);
+
+                // Cek apakah file benar-benar jadi
+                if (fs.existsSync(filePath)) {
+                    totalDownloads++;
+                    io.emit('update_counter', { totalDownloads });
+
+                    socket.emit('progress', { progress: 100, speedMBps: "0.00", etaSec: 0, title });
+                    socket.emit('done', { downloadUrl: `/download-file/${encodeURIComponent(fileName)}`, fileName });
+                } else {
+                    throw new Error('Gagal menghasilkan file MP3.');
+                }
+
+            } else {
+                socket.emit('error', 'Link tidak dikenali! Masukkan link SoundCloud atau YouTube yang valid.');
+            }
 
         } catch (error) {
-            socket.emit('error', 'Gagal memproses lagu. API mungkin sedang rate-limited.');
+            console.error('❌ Error:', error);
+            socket.emit('error', 'Gagal memproses media. Pastikan link publik dan tidak dibatasi.');
             if (filePath && fs.existsSync(filePath)) fs.unlinkSync(filePath);
         }
     });
@@ -134,15 +166,15 @@ app.get('/download-file/:filename', (req, res) => {
         res.download(filePath, fileName, (err) => {
             if (err) console.error("Error mengirim file:", err);
             fs.unlink(filePath, (unlinkErr) => {
-                if (unlinkErr) console.error("⚠️ Gagal menghapus file:", unlinkErr);
+                if (unlinkErr) console.error("⚠️ Gagal menghapus file temp:", unlinkErr);
             });
         });
     } else {
-        res.status(404).send('File tidak ditemukan atau sudah kadaluarsa.');
+        res.status(404).send('File sudah kadaluarsa atau tidak ditemukan.');
     }
 });
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
-    console.log(`🚀 Server berjalan di port ${PORT}`);
+    console.log(`🚀 Multi-Downloader Server aktif di port ${PORT}`);
 });
