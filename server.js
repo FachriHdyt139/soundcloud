@@ -18,7 +18,7 @@ if (!fs.existsSync(DOWNLOAD_DIR)) {
     fs.mkdirSync(DOWNLOAD_DIR, { recursive: true });
 }
 
-let totalDownloads = 1243;
+let totalDownloads = 1247;
 
 app.get('/api/stats', (req, res) => {
     res.json({ totalDownloads });
@@ -27,7 +27,7 @@ app.get('/api/stats', (req, res) => {
 io.on('connection', (socket) => {
     console.log('🔗 Client terhubung:', socket.id);
 
-    socket.on('start_download', async ({ url: inputUrl, platform }) => {
+    socket.on('start_download', async ({ url: inputUrl, platform, format }) => {
         let filePath = '';
 
         try {
@@ -38,10 +38,17 @@ io.on('connection', (socket) => {
             let url = inputUrl.trim();
             if (!/^https?:\/\//i.test(url)) url = 'https://' + url;
 
+            // Auto-detect platform jika diperlukan
+            if (url.includes('soundcloud.com') || url.includes('on.soundcloud.com')) {
+                platform = 'soundcloud';
+            } else if (url.includes('tiktok.com') || url.includes('vt.tiktok.com')) {
+                platform = 'tiktok';
+            }
+
             // ==========================================
             // SOUNDCLOUD DOWNLOADER
             // ==========================================
-            if (platform === 'soundcloud' || url.includes('soundcloud.com') || url.includes('on.soundcloud.com')) {
+            if (platform === 'soundcloud') {
                 socket.emit('info', 'Memproses link SoundCloud...');
                 
                 let finalUrl = url;
@@ -60,7 +67,6 @@ io.on('connection', (socket) => {
                 const title = (trackInfo.title || 'SoundCloud_Audio').replace(/[^a-zA-Z0-9_\-\s]/g, "").trim();
                 const coverUrl = trackInfo.artwork_url || 'https://i.scdn.co/image/ab67616d0000b273a04449a78531778971f11e95';
 
-                // Kirim preview ke frontend
                 socket.emit('preview', { title, coverUrl });
 
                 const fileName = `${title}_${Date.now()}.mp3`;
@@ -108,9 +114,9 @@ io.on('connection', (socket) => {
 
             } 
             // ==========================================
-            // TIKTOK DOWNLOADER (DENGAN PREVIEW)
+            // TIKTOK DOWNLOADER (DENGAN PILIHAN FORMAT)
             // ==========================================
-            else if (platform === 'tiktok' || url.includes('tiktok.com') || url.includes('vt.tiktok.com')) {
+            else if (platform === 'tiktok') {
                 socket.emit('info', 'Menghubungkan ke server TikTok...');
 
                 const apiRes = await fetch(`https://tikwm.com/api/?url=${encodeURIComponent(url)}`);
@@ -123,24 +129,30 @@ io.on('connection', (socket) => {
                 const videoData = resJson.data;
                 const title = (videoData.title || 'TikTok Video').trim();
                 const coverUrl = videoData.cover || videoData.origin_cover;
-                const videoDownloadUrl = videoData.play;
+                
+                // Cek apakah user ingin MP3 atau Video MP4
+                let downloadSourceUrl = videoData.play;
+                let fileExt = 'mp4';
+                if (format === 'mp3' && videoData.music) {
+                    downloadSourceUrl = videoData.music;
+                    fileExt = 'mp3';
+                }
 
-                // Kirim preview gambar & judul ke frontend
                 socket.emit('preview', { title, coverUrl });
 
                 const cleanTitle = title.replace(/[^a-zA-Z0-9_\-\s]/g, "").substring(0, 30);
-                const fileName = `${cleanTitle}_${Date.now()}.mp4`;
+                const fileName = `${cleanTitle}_${Date.now()}.${fileExt}`;
                 filePath = path.join(DOWNLOAD_DIR, fileName);
 
-                socket.emit('info', `Mengunduh video TikTok...`);
-                const videoRes = await fetch(videoDownloadUrl);
+                socket.emit('info', `Mengunduh ${fileExt.toUpperCase()} TikTok...`);
+                const mediaRes = await fetch(downloadSourceUrl);
                 const fileStream = fs.createWriteStream(filePath);
                 
-                const totalLength = parseInt(videoRes.headers.get('content-length') || '5000000');
+                const totalLength = parseInt(mediaRes.headers.get('content-length') || '5000000');
                 let downloaded = 0;
                 const startTime = Date.now();
 
-                const reader = videoRes.body.getReader();
+                const reader = mediaRes.body.getReader();
                 while (true) {
                     const { done, value } = await reader.read();
                     if (done) break;
@@ -172,7 +184,7 @@ io.on('connection', (socket) => {
                 });
 
             } else {
-                socket.emit('error', 'Link tidak dikenali atau tidak sesuai dengan tab yang dipilih.');
+                socket.emit('error', 'Link tidak dikenali.');
             }
 
         } catch (error) {
