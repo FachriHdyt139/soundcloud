@@ -27,7 +27,7 @@ app.get('/api/stats', (req, res) => {
 io.on('connection', (socket) => {
     console.log('🔗 Client terhubung:', socket.id);
 
-    socket.on('start_download', async (inputUrl) => {
+    socket.on('start_download', async ({ url: inputUrl, platform }) => {
         let filePath = '';
 
         try {
@@ -39,9 +39,9 @@ io.on('connection', (socket) => {
             if (!/^https?:\/\//i.test(url)) url = 'https://' + url;
 
             // ==========================================
-            // CASE 1: SOUNDCLOUD DOWNLOADER (100% WORK)
+            // SOUNDCLOUD DOWNLOADER
             // ==========================================
-            if (url.includes('soundcloud.com') || url.includes('on.soundcloud.com')) {
+            if (platform === 'soundcloud' || url.includes('soundcloud.com') || url.includes('on.soundcloud.com')) {
                 socket.emit('info', 'Memproses link SoundCloud...');
                 
                 let finalUrl = url;
@@ -103,17 +103,68 @@ io.on('connection', (socket) => {
 
             } 
             // ==========================================
-            // CASE 2: YOUTUBE SMART REDIRECT HANDLER
+            // TIKTOK DOWNLOADER
             // ==========================================
-            else if (url.includes('youtube.com') || url.includes('youtu.be')) {
-                // Daripada server Render Anda yang diblokir YouTube, 
-                // kita berikan solusi instan yang sukses mengunduh via pihak ketiga yang aman.
-                socket.emit('info', 'Mengarahkan ke converter stabil...');
-                setTimeout(() => {
-                    socket.emit('error', 'YouTube memblokir server cloud. Gunakan SoundCloud Downloader di atas yang 100% lancar jaya!');
-                }, 1500);
+            else if (platform === 'tiktok' || url.includes('tiktok.com') || url.includes('vt.tiktok.com')) {
+                socket.emit('info', 'Menghubungkan ke server TikTok...');
+                socket.emit('progress', { progress: 30, speedMBps: "2.50", etaSec: "2", title: "TikTok Video" });
+
+                // Menggunakan API pihak ketiga yang handal untuk mengambil video TikTok tanpa watermark
+                const apiRes = await fetch(`https://tikwm.com/api/?url=${encodeURIComponent(url)}`);
+                const resJson = await apiRes.json();
+
+                if (!resJson || resJson.code !== 0 || !resJson.data) {
+                    return socket.emit('error', 'Gagal mengambil video TikTok. Pastikan link publik.');
+                }
+
+                const videoData = resJson.data;
+                const videoDownloadUrl = videoData.play; // Video tanpa watermark
+                const title = (videoData.title || 'TikTok_Video').replace(/[^a-zA-Z0-9_\-\s]/g, "").trim().substring(0, 40);
+                const fileName = `${title}_${Date.now()}.mp4`;
+                filePath = path.join(DOWNLOAD_DIR, fileName);
+
+                socket.emit('info', `Mengunduh video TikTok...`);
+
+                const videoRes = await fetch(videoDownloadUrl);
+                const fileStream = fs.createWriteStream(filePath);
+                
+                const totalLength = parseInt(videoRes.headers.get('content-length') || '5000000');
+                let downloaded = 0;
+                const startTime = Date.now();
+
+                const reader = videoRes.body.getReader();
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+                    
+                    fileStream.write(value);
+                    downloaded += value.length;
+
+                    const elapsedTime = (Date.now() - startTime) / 1000 || 0.001;
+                    const speedBps = downloaded / elapsedTime;
+                    const speedMBps = (speedBps / (1024 * 1024)).toFixed(2);
+                    const progress = Math.min((downloaded / totalLength) * 100, 99).toFixed(1);
+                    const etaSec = ((totalLength - downloaded) / speedBps).toFixed(0);
+
+                    socket.emit('progress', {
+                        progress, speedMBps, etaSec,
+                        downloadedMB: (downloaded / (1024 * 1024)).toFixed(2),
+                        sizeMB: (totalLength / (1024 * 1024)).toFixed(2),
+                        title
+                    });
+                }
+
+                fileStream.end();
+
+                fileStream.on('finish', () => {
+                    totalDownloads++;
+                    io.emit('update_counter', { totalDownloads });
+                    socket.emit('progress', { progress: 100, speedMBps: "0.00", etaSec: 0, title });
+                    socket.emit('done', { downloadUrl: `/download-file/${encodeURIComponent(fileName)}`, fileName });
+                });
+
             } else {
-                socket.emit('error', 'Link tidak dikenali! Gunakan link SoundCloud yang valid.');
+                socket.emit('error', 'Link tidak dikenali atau tidak sesuai dengan tab yang dipilih.');
             }
 
         } catch (error) {
@@ -142,5 +193,5 @@ app.get('/download-file/:filename', (req, res) => {
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
-    console.log(`🚀 Server Stabil aktif di port ${PORT}`);
+    console.log(`🚀 Server aktif di port ${PORT}`);
 });
