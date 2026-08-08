@@ -33,19 +33,16 @@ io.on('connection', (socket) => {
             if (!url) return socket.emit('error', 'URL tidak boleh kosong!');
 
             // ==========================================
-            // 1. SOUNDCLOUD (Menggunakan API Downloader Stabil)
+            // 1. SOUNDCLOUD
             // ==========================================
             if (platform === 'soundcloud') {
                 socket.emit('info', 'Memproses link SoundCloud...');
                 
-                // Menggunakan API publik soundcloud downloader yang stabil
-                const apiRes = await fetch(`https://api.soundcloud.mp3download.to/get?url=${encodeURIComponent(url)}`).catch(() => null);
-                
-                // Fallback API alternatif jika yang pertama gagal
                 let downloadSourceUrl = '';
                 let title = 'SoundCloud Audio';
                 let coverUrl = 'https://images.unsplash.com/photo-1611162617474-5b21e879e113';
 
+                const apiRes = await fetch(`https://api.soundcloud.mp3download.to/get?url=${encodeURIComponent(url)}`).catch(() => null);
                 if (apiRes && apiRes.ok) {
                     const json = await apiRes.json();
                     if (json && json.download_url) {
@@ -55,9 +52,7 @@ io.on('connection', (socket) => {
                     }
                 }
 
-                // Jika API pertama gagal, gunakan alternatif scdl via Rapid/Free Endpoint
                 if (!downloadSourceUrl) {
-                    // Alternatif menggunakan sc-dl free proxy service
                     const altRes = await fetch(`https://soundcloud-dl.a-z.workers.dev/?url=${encodeURIComponent(url)}`).catch(() => null);
                     if (altRes && altRes.ok) {
                         const altJson = await altRes.json();
@@ -66,9 +61,7 @@ io.on('connection', (socket) => {
                     }
                 }
 
-                // Jika masih belum dapat, berikan Direct Stream Handler via fetch biasa
                 if (!downloadSourceUrl) {
-                    // Pakai scraper alternatif dari cobalt/helper API publik yang sangat handal
                     const cobaltRes = await fetch('https://api.cobalt.tools/api/json', {
                         method: 'POST',
                         headers: {
@@ -198,7 +191,7 @@ app.get('/download-file/:filename', (req, res) => {
     const fileName = req.params.filename;
     const filePath = path.join(DOWNLOAD_DIR, fileName);
 
-*(fs.existsSync(filePath)) {
+    if (fs.existsSync(filePath)) {
         res.download(filePath, (err) => {
             if (err) console.error("Error:", err);
             fs.unlink(filePath, () => {});
