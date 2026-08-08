@@ -3,94 +3,271 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Media Downloader - SoundCloud & TikTok</title>
-    <link rel="stylesheet" href="style.css">
+    <title>Media Downloader Pro - Enterprise Edition</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="/socket.io/socket.io.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        @keyframes floatAnime {
+            0%, 100% { transform: translateY(0px) rotate(0deg); }
+            50% { transform: translateY(-10px) rotate(2deg); }
+        }
+        .anime-float { animation: floatAnime 4s ease-in-out infinite; }
+        body {
+            background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 50%, #311042 100%);
+            min-height: 100vh;
+            color: #f8fafc;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            overflow-x: hidden;
+        }
+    </style>
 </head>
-<body>
-    <div class="container">
-        <header>
-            <div class="profile-container">
-                <img src="https://images.unsplash.com/photo-1534528741775-53994a69daeb" alt="Profile" class="profile-pic">
-                <span class="badge">PRO</span>
-            </div>
-            <h1>MEDIA DOWNLOADER</h1>
-            <p class="subtitle">Enterprise High-Speed Media Downloader</p>
-            <div class="stats">
-                <i class="fa-solid fa-fire"></i> Total Unduhan: <span id="total-downloads">1256</span>
-            </div>
-        </header>
+<body class="flex flex-col items-center justify-between p-4">
 
-        <main>
-            <div class="card">
-                <div class="platform-tabs">
-                    <button class="tab-btn active" data-platform="soundcloud">
-                        <i class="fa-brands fa-soundcloud"></i> SoundCloud
-                    </button>
-                    <button class="tab-btn" data-platform="tiktok">
-                        <i class="fa-brands fa-tiktok"></i> TikTok
-                    </button>
-                </div>
+    <!-- Toast Notification Container -->
+    <div id="toast-container" class="fixed top-4 right-4 z-50 space-y-2"></div>
 
-                <div class="input-group">
-                    <label id="input-label" for="url-input">Tempel Link SOUNDCLOUD:</label>
-                    <div class="input-wrapper">
-                        <input type="text" id="url-input" placeholder="https://soundcloud.com/...">
-                        <button id="paste-btn"><i class="fa-solid fa-paste"></i> Paste</button>
-                    </div>
-                </div>
-
-                <div class="input-group" id="format-group">
-                    <label for="format-select"><i class="fa-solid fa-sliders"></i> Format Output:</label>
-                    <select id="format-select" class="format-select">
-                        <option value="audio">Audio (MP3)</option>
-                        <option value="video">Video (Tanpa Watermark)</option>
-                    </select>
-                </div>
-
-                <button id="download-btn" class="action-btn">
-                    <i class="fa-solid fa-rocket"></i> Unduh Sekarang
-                </button>
-
-                <div id="status-box" class="status-box hidden">
-                    <div class="loader-spinner"></div>
-                    <p id="status-text">Memproses...</p>
-                    <div class="progress-bar-container" id="progress-container">
-                        <div class="progress-bar" id="progress-bar"></div>
-                        <span id="progress-text">0%</span>
-                    </div>
-                    <div class="download-info" id="download-info">
-                        <p>Kecepatan: <span id="speed">0.00</span> MB/s</p>
-                        <p>ETA: <span id="eta">0s</span></p>
-                    </div>
-                </div>
-
-                <div id="preview-box" class="preview-box hidden">
-                    <div class="preview-content">
-                        <img id="preview-img" src="" alt="Thumbnail">
-                        <div class="preview-details">
-                            <span class="preview-title-label">JUDUL MEDIA:</span>
-                            <h4 id="preview-title">-</h4>
-                        </div>
-                    </div>
-                    <a id="download-link-btn" href="#" class="save-btn" download>
-                        <i class="fa-solid fa-download"></i> Simpan ke Perangkat
-                    </a>
-                </div>
-            </div>
-
-            <div class="footer-info-card">
-                <div class="footer-info-item">
-                    <i class="fa-solid fa-shield-halved"></i> 100% Aman & Tanpa Iklan
-                </div>
-                <div class="footer-info-tip">
-                    <i class="fa-solid fa-lightbulb"></i> <strong>Tips:</strong> Cukup tempel link, sistem otomatis mendeteksi platform dan menampilkan preview secara instan.
-                </div>
-            </div>
-        </main>
+    <!-- Header / Mascot Section -->
+    <div class="text-center mt-2">
+        <div class="relative inline-block anime-float">
+            <img src="https://media1.giphy.com/media/v1.Y2lkPTc5MGI3NjExM3Z2bzJpYW5oajVvZGR5dGNha3JjZ2VvNnd4Y2R4OG9nb2EwbzBwayZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/Lq0h93752f6J9tijrh/giphy.gif" alt="Mascot" class="w-24 h-24 object-cover rounded-full border-4 border-pink-500 shadow-lg shadow-pink-500/50 mx-auto">
+            <span class="absolute bottom-0 right-0 bg-pink-600 text-[10px] px-2 py-0.5 rounded-full font-bold animate-pulse">PRO</span>
+        </div>
+        <h1 class="text-xl font-black mt-2 tracking-wider bg-gradient-to-r from-pink-400 to-purple-400 bg-clip-text text-transparent">MEDIA DOWNLOADER</h1>
+        <p class="text-[11px] text-slate-400">Enterprise High-Speed Media Downloader</p>
+        <div class="inline-block bg-slate-800/80 border border-slate-700 px-3 py-0.5 rounded-full text-[11px] mt-1 text-yellow-400 font-semibold shadow">
+            🔥 Total Unduhan: <span id="total-downloads">1247</span>
+        </div>
     </div>
 
-    <script src="/socket.io/socket.io.js"></script>
-    <script src="script.js"></script>
+    <!-- MAIN CONTAINER -->
+    <div class="w-full max-w-md bg-slate-900/95 backdrop-blur-md border border-slate-800 p-4 rounded-2xl shadow-2xl my-3">
+        
+        <!-- PLATFORM TABS -->
+        <div class="grid grid-cols-2 gap-2 bg-slate-800 p-1 rounded-xl mb-4">
+            <button id="tab-soundcloud" onclick="switchPlatform('soundcloud')" class="py-2 rounded-lg text-xs font-bold transition-all duration-300 bg-gradient-to-r from-orange-500 to-amber-600 text-white shadow-md">
+                <i class="fa-brands fa-soundcloud mr-1"></i> SoundCloud
+            </button>
+            <button id="tab-tiktok" onclick="switchPlatform('tiktok')" class="py-2 rounded-lg text-xs font-bold transition-all duration-300 text-slate-400 hover:text-white">
+                <i class="fa-brands fa-tiktok mr-1"></i> TikTok
+            </button>
+        </div>
+
+        <!-- INPUT FORM DENGAN QUICK PASTE BUTTON -->
+        <div class="space-y-3">
+            <div>
+                <label id="input-label" class="block text-xs font-semibold text-slate-400 mb-1">Tempel Link SoundCloud:</label>
+                <div class="relative flex items-center">
+                    <input type="text" id="url-input" oninput="autoDetectPlatform(this.value)" placeholder="https://soundcloud.com/..." class="w-full bg-slate-950 border border-slate-700 focus:border-pink-500 rounded-xl pl-4 pr-16 py-3 text-xs text-white outline-none transition">
+                    <button onclick="pasteClipboard()" class="absolute right-1.5 bg-slate-800 hover:bg-slate-700 text-pink-400 px-3 py-1.5 rounded-lg text-xs font-bold transition border border-slate-700">
+                        <i class="fa-solid fa-paste mr-1"></i> Paste
+                    </button>
+                </div>
+            </div>
+
+            <!-- QUALITY / FORMAT SELECTOR (Khusus TikTok/Umum) -->
+            <div id="format-container" class="hidden flex items-center justify-between bg-slate-950 px-3 py-2 rounded-xl border border-slate-800 text-xs">
+                <span class="text-slate-400 font-medium"><i class="fa-solid fa-sliders text-pink-400 mr-1.5"></i> Format Output:</span>
+                <select id="format-select" class="bg-slate-900 text-white border border-slate-700 rounded-lg px-2 py-1 outline-none text-xs">
+                    <option value="mp4">Video (Tanpa Watermark)</option>
+                    <option value="mp3">Audio Musik (MP3)</option>
+                </select>
+            </div>
+
+            <button onclick="startDownload()" id="download-btn" class="w-full bg-gradient-to-r from-pink-500 to-purple-600 hover:from-pink-600 hover:to-purple-700 text-white font-bold py-3 rounded-xl transition shadow-lg shadow-pink-500/30 flex items-center justify-center space-x-2 text-xs">
+                <i class="fa-solid fa-rocket"></i>
+                <span id="btn-text">Unduh Sekarang</span>
+            </button>
+        </div>
+
+        <!-- PREVIEW BOX -->
+        <div id="preview-box" class="mt-3 hidden bg-slate-950 border border-slate-800 rounded-xl p-2.5 flex items-center space-x-3">
+            <img id="preview-img" src="" alt="Thumbnail" class="w-14 h-14 object-cover rounded-lg border border-slate-700 shadow flex-shrink-0">
+            <div class="overflow-hidden">
+                <p class="text-[9px] text-pink-400 font-semibold uppercase tracking-wider">Judul Media:</p>
+                <h3 id="preview-title" class="text-xs text-white font-bold truncate max-w-[210px]">Memuat judul...</h3>
+            </div>
+        </div>
+
+        <!-- STATUS / LOG BOX -->
+        <div id="status-box" class="mt-3 hidden bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs space-y-2">
+            <div class="flex justify-between text-slate-400">
+                <span id="status-title" class="truncate max-w-[190px] text-pink-400 font-semibold">Menghubungkan...</span>
+                <span id="progress-text">0%</span>
+            </div>
+            <div class="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
+                <div id="progress-bar" class="bg-gradient-to-r from-pink-500 to-purple-500 h-full w-0 transition-all duration-200"></div>
+            </div>
+            <div class="flex justify-between text-[10px] text-slate-500">
+                <span id="speed-text">Kecepatan: 0.00 MB/s</span>
+                <span id="eta-text">Estimasi: 0s</span>
+            </div>
+        </div>
+
+        <!-- ERROR MESSAGE -->
+        <div id="error-box" class="mt-3 hidden bg-red-950/50 border border-red-800/80 text-red-300 p-2.5 rounded-xl text-xs text-center"></div>
+
+        <!-- RESULT DOWNLOAD LINK -->
+        <div id="result-box" class="mt-3 hidden text-center">
+            <a id="download-link" href="#" class="inline-block w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 rounded-xl shadow-lg transition text-xs">
+                <i class="fa-solid fa-download mr-2"></i> Simpan ke Perangkat
+            </a>
+        </div>
+    </div>
+
+    <!-- FAQ & TRUST SECTION -->
+    <div class="w-full max-w-md bg-slate-900/60 border border-slate-800/80 rounded-xl p-3 text-[11px] text-slate-400 mb-2 space-y-1.5">
+        <div class="flex items-center justify-between font-semibold text-slate-300 border-b border-slate-800 pb-1">
+            <span><i class="fa-solid fa-shield-halved text-emerald-400 mr-1"></i> 100% Aman & Tanpa Iklan</span>
+            <span>FAQ</span>
+        </div>
+        <p>💡 <b class="text-slate-300">Tips:</b> Cukup tempel link, sistem otomatis mendeteksi platform dan menampilkan preview secara instan.</p>
+    </div>
+
+    <!-- Footer -->
+    <footer class="text-[11px] text-slate-500 text-center mb-1">
+        Created with <span class="text-pink-500">❤️</span> by <span class="font-semibold text-slate-400">@FACHRI_HDYT</span>
+    </footer>
+
+    <script>
+        const socket = io();
+        let currentPlatform = 'soundcloud';
+
+        function showToast(message, type = 'success') {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            const bgColor = type === 'success' ? 'bg-emerald-600' : 'bg-red-600';
+            toast.className = `${bgColor} text-white px-4 py-2 rounded-xl text-xs shadow-xl flex items-center space-x-2 transition-all duration-300 translate-y-[-20px] opacity-0`;
+            toast.innerHTML = `<i class="fa-solid ${type === 'success' ? 'fa-check-circle' : 'fa-triangle-exclamation'}"></i><span>${message}</span>`;
+            container.appendChild(toast);
+            
+            setTimeout(() => { toast.classList.remove('translate-y-[-20px]', 'opacity-0'); }, 50);
+            setTimeout(() => {
+                toast.classList.add('translate-y-[-20px]', 'opacity-0');
+                setTimeout(() => toast.remove(), 300);
+            }, 3000);
+        }
+
+        async function pasteClipboard() {
+            try {
+                const text = await navigator.clipboard.readText();
+                document.getElementById('url-input').value = text;
+                autoDetectPlatform(text);
+                showToast('Link berhasil ditempel dari clipboard!');
+            } catch (err) {
+                showToast('Gagal membaca clipboard. Izinkan akses atau paste manual.', 'error');
+            }
+        }
+
+        function autoDetectPlatform(url) {
+            if (url.includes('tiktok.com') || url.includes('vt.tiktok.com')) {
+                if (currentPlatform !== 'tiktok') switchPlatform('tiktok', false);
+            } else if (url.includes('soundcloud.com') || url.includes('on.soundcloud.com')) {
+                if (currentPlatform !== 'soundcloud') switchPlatform('soundcloud', false);
+            }
+        }
+
+        function switchPlatform(platform, resetInput = true) {
+            currentPlatform = platform;
+            const scBtn = document.getElementById('tab-soundcloud');
+            const tkBtn = document.getElementById('tab-tiktok');
+            const inputLabel = document.getElementById('input-label');
+            const urlInput = document.getElementById('url-input');
+            const formatContainer = document.getElementById('format-container');
+
+            if (resetInput) resetUI();
+
+            if (platform === 'soundcloud') {
+                scBtn.className = "py-2 rounded-lg text-xs font-bold transition-all duration-300 bg-gradient-to-r from-orange-500 to-amber-600 text-white shadow-md";
+                tkBtn.className = "py-2 rounded-lg text-xs font-bold transition-all duration-300 text-slate-400 hover:text-white";
+                inputLabel.innerText = "Tempel Link SoundCloud:";
+                urlInput.placeholder = "https://soundcloud.com/...";
+                formatContainer.classList.add('hidden');
+            } else {
+                tkBtn.className = "py-2 rounded-lg text-xs font-bold transition-all duration-300 bg-gradient-to-r from-cyan-500 to-blue-600 text-white shadow-md";
+                scBtn.className = "py-2 rounded-lg text-xs font-bold transition-all duration-300 text-slate-400 hover:text-white";
+                inputLabel.innerText = "Tempel Link TikTok:";
+                urlInput.placeholder = "https://vt.tiktok.com/...";
+                formatContainer.classList.remove('hidden');
+            }
+        }
+
+        function resetUI() {
+            document.getElementById('status-box').classList.add('hidden');
+            document.getElementById('error-box').classList.add('hidden');
+            document.getElementById('result-box').classList.add('hidden');
+            document.getElementById('preview-box').classList.add('hidden');
+            document.getElementById('progress-bar').style.width = '0%';
+        }
+
+        function startDownload() {
+            const url = document.getElementById('url-input').value.trim();
+            const format = document.getElementById('format-select').value;
+            if (!url) {
+                showError("Link tidak boleh kosong!");
+                showToast("Link tidak boleh kosong!", "error");
+                return;
+            }
+
+            resetUI();
+            document.getElementById('status-box').classList.remove('hidden');
+            document.getElementById('download-btn').disabled = true;
+            document.getElementById('btn-text').innerText = "Memproses...";
+
+            socket.emit('start_download', { url, platform: currentPlatform, format });
+        }
+
+        function showError(msg) {
+            const errBox = document.getElementById('error-box');
+            errBox.innerText = msg;
+            errBox.classList.remove('hidden');
+            document.getElementById('status-box').classList.add('hidden');
+            document.getElementById('download-btn').disabled = false;
+            document.getElementById('btn-text').innerText = "Unduh Sekarang";
+        }
+
+        socket.on('preview', (data) => {
+            const previewBox = document.getElementById('preview-box');
+            const previewImg = document.getElementById('preview-img');
+            const previewTitle = document.getElementById('preview-title');
+
+            previewImg.src = data.coverUrl;
+            previewTitle.innerText = data.title;
+            previewBox.classList.remove('hidden');
+            showToast("Metadata berhasil dimuat!");
+        });
+
+        socket.on('info', (msg) => {
+            document.getElementById('status-title').innerText = msg;
+        });
+
+        socket.on('progress', (data) => {
+            document.getElementById('progress-bar').style.width = `${data.progress}%`;
+            document.getElementById('progress-text').innerText = `${data.progress}%`;
+            document.getElementById('speed-text').innerText = `Kecepatan: ${data.speedMBps} MB/s`;
+            document.getElementById('eta-text').innerText = `Estimasi: ${data.etaSec}s`;
+        });
+
+        socket.on('done', (data) => {
+            document.getElementById('status-box').classList.add('hidden');
+            const resBox = document.getElementById('result-box');
+            const link = document.getElementById('download-link');
+            link.href = data.downloadUrl;
+            link.download = data.fileName;
+            resBox.classList.remove('hidden');
+            document.getElementById('download-btn').disabled = false;
+            document.getElementById('btn-text').innerText = "Unduh Sekarang";
+            showToast("File siap diunduh!");
+        });
+
+        socket.on('error', (errMsg) => {
+            showError(errMsg);
+            showToast(errMsg, "error");
+        });
+
+        socket.on('update_counter', (data) => {
+            document.getElementById('total-downloads').innerText = data.totalDownloads;
+        });
+    </script>
 </body>
 </html>
