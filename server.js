@@ -18,7 +18,7 @@ if (!fs.existsSync(DOWNLOAD_DIR)) {
     fs.mkdirSync(DOWNLOAD_DIR, { recursive: true });
 }
 
-let totalDownloads = 1241;
+let totalDownloads = 1243;
 
 app.get('/api/stats', (req, res) => {
     res.json({ totalDownloads });
@@ -58,6 +58,11 @@ io.on('connection', (socket) => {
                 socket.emit('info', 'Mengambil metadata lagu...');
                 const trackInfo = await scdl.getInfo(finalUrl);
                 const title = (trackInfo.title || 'SoundCloud_Audio').replace(/[^a-zA-Z0-9_\-\s]/g, "").trim();
+                const coverUrl = trackInfo.artwork_url || 'https://i.scdn.co/image/ab67616d0000b273a04449a78531778971f11e95';
+
+                // Kirim preview ke frontend
+                socket.emit('preview', { title, coverUrl });
+
                 const fileName = `${title}_${Date.now()}.mp3`;
                 filePath = path.join(DOWNLOAD_DIR, fileName);
 
@@ -103,13 +108,11 @@ io.on('connection', (socket) => {
 
             } 
             // ==========================================
-            // TIKTOK DOWNLOADER
+            // TIKTOK DOWNLOADER (DENGAN PREVIEW)
             // ==========================================
             else if (platform === 'tiktok' || url.includes('tiktok.com') || url.includes('vt.tiktok.com')) {
                 socket.emit('info', 'Menghubungkan ke server TikTok...');
-                socket.emit('progress', { progress: 30, speedMBps: "2.50", etaSec: "2", title: "TikTok Video" });
 
-                // Menggunakan API pihak ketiga yang handal untuk mengambil video TikTok tanpa watermark
                 const apiRes = await fetch(`https://tikwm.com/api/?url=${encodeURIComponent(url)}`);
                 const resJson = await apiRes.json();
 
@@ -118,13 +121,18 @@ io.on('connection', (socket) => {
                 }
 
                 const videoData = resJson.data;
-                const videoDownloadUrl = videoData.play; // Video tanpa watermark
-                const title = (videoData.title || 'TikTok_Video').replace(/[^a-zA-Z0-9_\-\s]/g, "").trim().substring(0, 40);
-                const fileName = `${title}_${Date.now()}.mp4`;
+                const title = (videoData.title || 'TikTok Video').trim();
+                const coverUrl = videoData.cover || videoData.origin_cover;
+                const videoDownloadUrl = videoData.play;
+
+                // Kirim preview gambar & judul ke frontend
+                socket.emit('preview', { title, coverUrl });
+
+                const cleanTitle = title.replace(/[^a-zA-Z0-9_\-\s]/g, "").substring(0, 30);
+                const fileName = `${cleanTitle}_${Date.now()}.mp4`;
                 filePath = path.join(DOWNLOAD_DIR, fileName);
 
                 socket.emit('info', `Mengunduh video TikTok...`);
-
                 const videoRes = await fetch(videoDownloadUrl);
                 const fileStream = fs.createWriteStream(filePath);
                 
