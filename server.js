@@ -18,8 +18,7 @@ if (!fs.existsSync(DOWNLOAD_DIR)) {
     fs.mkdirSync(DOWNLOAD_DIR, { recursive: true });
 }
 
-let totalDownloads = 1255;
-const RAPID_API_KEY = process.env.RAPID_API_KEY || '4ae8cf984dmshddf06cb87ec7b8ep19e868jsna99694e67dd6';
+let totalDownloads = 1256;
 
 app.get('/api/stats', (req, res) => {
     res.json({ totalDownloads });
@@ -41,14 +40,27 @@ io.on('connection', (socket) => {
             }
 
             // ==========================================
-            // 1. SOUNDCLOUD
+            // 1. SOUNDCLOUD DOWNLOADER (Stabil & Native)
             // ==========================================
             if (platform === 'soundcloud') {
                 socket.emit('info', 'Memproses link SoundCloud...');
-                const finalUrl = await scdl.getInfo(url).then(() => url).catch(() => null);
-                if (!finalUrl) return socket.emit('error', 'Gagal memproses link SoundCloud.');
+                
+                // Mendukung link pendek on.soundcloud.com atau link panjang
+                let finalUrl = url;
+                try {
+                    const infoTest = await scdl.getInfo(url);
+                    if (infoTest && infoTest.permalink_url) {
+                        finalUrl = infoTest.permalink_url;
+                    }
+                } catch (e) {
+                    // Jika gagal cek langsung, biarkan menggunakan URL asli
+                }
 
-                const trackInfo = await scdl.getInfo(finalUrl);
+                const trackInfo = await scdl.getInfo(finalUrl).catch(() => null);
+                if (!trackInfo) {
+                    return socket.emit('error', 'Gagal memproses link SoundCloud. Pastikan link benar.');
+                }
+
                 const title = (trackInfo.title || 'SoundCloud Audio').substring(0, 40).trim();
                 const coverUrl = trackInfo.artwork_url || 'https://images.unsplash.com/photo-1611162617474-5b21e879e113';
 
@@ -74,6 +86,7 @@ io.on('connection', (socket) => {
                     const speedMBps = (speedBps / (1024 * 1024)).toFixed(2);
                     const progress = Math.min((downloaded / (totalLength * 1000)) * 100, 99).toFixed(1);
                     const etaSec = ((totalLength - downloaded) / speedBps).toFixed(0);
+
                     socket.emit('progress', { progress, speedMBps, etaSec, title });
                 });
 
@@ -83,17 +96,23 @@ io.on('connection', (socket) => {
                     socket.emit('progress', { progress: 100, speedMBps: "0.00", etaSec: 0, title });
                     socket.emit('done', { downloadUrl: `/download-file/${encodeURIComponent(fileName)}`, fileName, title, coverUrl });
                 });
+
+                stream.on('error', (err) => {
+                    console.error('Error stream SoundCloud:', err);
+                    socket.emit('error', 'Gagal mengunduh file SoundCloud.');
+                });
             } 
             // ==========================================
-            // 2. TIKTOK
+            // 2. TIKTOK DOWNLOADER (Super Stabil via TikWM)
             // ==========================================
             else if (platform === 'tiktok') {
                 socket.emit('info', 'Memproses link TikTok...');
+                
                 const apiRes = await fetch(`https://www.tikwm.com/api/?url=${encodeURIComponent(url)}`);
                 const resJson = await apiRes.json();
 
                 if (!resJson || !resJson.data || !resJson.data.play) {
-                    return socket.emit('error', 'Gagal mengambil video TikTok.');
+                    return socket.emit('error', 'Gagal mengambil video TikTok. Coba link lain.');
                 }
 
                 const downloadSourceUrl = resJson.data.play;
@@ -108,80 +127,9 @@ io.on('connection', (socket) => {
 
                 socket.emit('info', 'Mengunduh file TikTok...');
                 const mediaRes = await fetch(downloadSourceUrl);
-                const fileStream = fs.createWriteStream(filePath);
-                
-                const totalLength = parseInt(mediaRes.headers.get('content-length') || '10000000');
-                let downloaded = 0;
-                const startTime = Date.now();
-
-                const reader = mediaRes.body.getReader();
-                while (true) {
-                    const { done, value } = await reader.read();
-                    if (done) break;
-                    fileStream.write(value);
-                    downloaded += value.length;
-
-                    const elapsedTime = (Date.now() - startTime) / 1000 || 0.001;
-                    const speedBps = downloaded / elapsedTime;
-                    const speedMBps = (speedBps / (1024 * 1024)).toFixed(2);
-                    const progress = Math.min((downloaded / totalLength) * 100, 99).toFixed(1);
-                    const etaSec = ((totalLength - downloaded) / speedBps).toFixed(0);
-
-                    socket.emit('progress', { progress, speedMBps, etaSec, title });
-                }
-
-                fileStream.end();
-                fileStream.on('finish', () => {
-                    totalDownloads++;
-                    io.emit('update_counter', { totalDownloads });
-                    socket.emit('progress', { progress: 100, speedMBps: "0.00", etaSec: 0, title });
-                    socket.emit('done', { downloadUrl: `/download-file/${encodeURIComponent(fileName)}`, fileName, title, coverUrl });
-                });
-            }
-            // ==========================================
-            // 3. YOUTUBE & INSTAGRAM
-            // ==========================================
-            else if (platform === 'instagram' || platform === 'youtube') {
-                socket.emit('info', `Menghubungkan ke API ${platform.toUpperCase()}...`);
-                
-                const apiHost = 'all-media-downloader4.p.rapidapi.com';
-                const endpointUrl = `https://${apiHost}/api/${platform}/download?url=${encodeURIComponent(url)}`;
-
-                const apiRes = await fetch(endpointUrl, {
-                    method: 'GET',
-                    headers: {
-                        'x-rapidapi-key': RAPID_API_KEY,
-                        'x-rapidapi-host': apiHost
-                    }
-                });
-
-                const resJson = await apiRes.json();
-                
-                let downloadSourceUrl = '';
-                if (resJson) {
-                    downloadSourceUrl = resJson.url || resJson.link || resJson.video || 
-                                       resJson.download || resJson.medias?.[0]?.url ||
-                                       (resJson.data && (resJson.data.url || resJson.data.link || resJson.data.video));
-                }
-
-                if (!downloadSourceUrl) {
-                    return socket.emit('error', `Gagal mendapatkan link ${platform}. Coba gunakan link video lain.`);
-                }
-
-                const title = (resJson.title || resJson.caption || resJson.data?.title || `${platform} Media`).substring(0, 40).trim();
-                const coverUrl = resJson.thumbnail || resJson.cover || resJson.data?.thumbnail || 'https://images.unsplash.com/photo-1611162617474-5b21e879e113';
-
-                socket.emit('preview', { title, coverUrl });
-
-                const cleanTitle = title.replace(/[^a-zA-Z0-9_\-\s]/g, "");
-                const fileName = `${platform}_${cleanTitle}_${Date.now()}.mp4`;
-                filePath = path.join(DOWNLOAD_DIR, fileName);
-
-                socket.emit('info', `Mengunduh file ${platform.toUpperCase()}...`);
-                const mediaRes = await fetch(downloadSourceUrl);
                 
                 if (!mediaRes.ok) {
-                    return socket.emit('error', 'Gagal mengunduh stream file media.');
+                    return socket.emit('error', 'Gagal menyambung ke server video TikTok.');
                 }
 
                 const fileStream = fs.createWriteStream(filePath);
@@ -193,6 +141,7 @@ io.on('connection', (socket) => {
                 while (true) {
                     const { done, value } = await reader.read();
                     if (done) break;
+                    
                     fileStream.write(value);
                     downloaded += value.length;
 
@@ -213,11 +162,11 @@ io.on('connection', (socket) => {
                     socket.emit('done', { downloadUrl: `/download-file/${encodeURIComponent(fileName)}`, fileName, title, coverUrl });
                 });
             } else {
-                socket.emit('error', 'Platform tidak didukung.');
+                socket.emit('error', 'Platform ini telah dinonaktifkan.');
             }
 
         } catch (error) {
-            console.error('Error:', error);
+            console.error('Error sistem:', error);
             socket.emit('error', 'Terjadi kesalahan internal pada server.');
             if (filePath && fs.existsSync(filePath)) fs.unlinkSync(filePath);
         }
