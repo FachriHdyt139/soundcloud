@@ -1,7 +1,7 @@
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
-const scdl = require('soundcloud-downloader').default; // MENGGUNAKAN LIBRARY BARU
+const scdl = require('soundcloud-downloader').default;
 const fs = require('fs');
 const path = require('path');
 const cors = require('cors');
@@ -18,7 +18,14 @@ if (!fs.existsSync(DOWNLOAD_DIR)) {
     fs.mkdirSync(DOWNLOAD_DIR, { recursive: true });
 }
 
-// Fungsi untuk bypass Shortlink & Mobile URL
+// Live Counter Global (Disimpan di memori server)
+let totalDownloads = 1240; // Angka awal fiktif agar langsung ramai
+
+// Endpoint API untuk mengecek statistik download secara live
+app.get('/api/stats', (req, res) => {
+    res.json({ totalDownloads });
+});
+
 async function getRealUrl(inputUrl) {
     let finalUrl = inputUrl;
     if (finalUrl.includes('on.soundcloud.com')) {
@@ -26,11 +33,9 @@ async function getRealUrl(inputUrl) {
             const response = await fetch(finalUrl, { method: 'GET', redirect: 'follow' });
             finalUrl = response.url;
         } catch (err) {
-            console.error("Gagal resolve shortlink:", err);
             throw new Error("Gagal membaca shortlink.");
         }
     }
-    // Ubah link mobile ke desktop dan bersihkan parameter tracking
     return finalUrl.replace('m.soundcloud.com', 'soundcloud.com').split('?')[0];
 }
 
@@ -47,40 +52,32 @@ io.on('connection', (socket) => {
 
             socket.emit('info', 'Memverifikasi link SoundCloud...');
 
-            // Bersihkan & Pastikan ada HTTPS
             let url = inputUrl.trim();
             if (!/^https?:\/\//i.test(url)) url = 'https://' + url;
 
-            // Dapatkan URL Asli
             const finalUrl = await getRealUrl(url);
-            console.log('🔄 Link siap diproses:', finalUrl);
 
-            // Cek apakah URL benar-benar valid format SoundCloud-nya
             if (!scdl.isValidUrl(finalUrl)) {
                 return socket.emit('error', 'Format URL tidak valid. Pastikan itu link lagu SoundCloud.');
             }
 
             socket.emit('info', 'Mengambil metadata lagu...');
 
-            // Ambil Info Lagu menggunakan Engine Baru
             const trackInfo = await scdl.getInfo(finalUrl);
             if (!trackInfo || !trackInfo.title) {
                 return socket.emit('error', 'Lagu tidak ditemukan atau diset Private.');
             }
 
-            // Bersihkan nama file dari karakter aneh
             const title = trackInfo.title.replace(/[^a-zA-Z0-9_\-\s]/g, "").trim();
             const fileName = `${title}_${Date.now()}.mp3`;
             filePath = path.join(DOWNLOAD_DIR, fileName);
 
             socket.emit('info', `Mengunduh: ${title}...`);
 
-            // Mulai Proses Download
             const stream = await scdl.downloadFormat(finalUrl, scdl.FORMATS.MP3);
             const fileStream = fs.createWriteStream(filePath);
 
             const durationSec = (trackInfo.duration || 0) / 1000;
-            // Estimasi ukuran file
             const estimatedSize = durationSec > 0 ? (128 * 1000 * durationSec) / 8 : 5 * 1024 * 1024;
 
             let downloaded = 0;
@@ -107,7 +104,9 @@ io.on('connection', (socket) => {
             stream.pipe(fileStream);
 
             fileStream.on('finish', () => {
-                console.log(`✅ Sukses mengunduh: ${fileName}`);
+                totalDownloads++; // Tambah counter global
+                io.emit('update_counter', { totalDownloads }); // Broadcast ke semua user
+
                 socket.emit('progress', { progress: 100, speedMBps: "0.00", etaSec: 0, title });
                 socket.emit('done', {
                     downloadUrl: `/download-file/${encodeURIComponent(fileName)}`,
@@ -116,29 +115,26 @@ io.on('connection', (socket) => {
             });
 
             stream.on('error', (err) => {
-                console.error('❌ Stream error:', err);
                 socket.emit('error', 'Terjadi kesalahan saat memproses audio SoundCloud.');
                 if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
             });
 
         } catch (error) {
-            console.error('❌ System Error:', error.message);
-            socket.emit('error', 'Gagal memproses lagu. API mungkin sedang rate-limited. Coba beberapa saat lagi.');
+            socket.emit('error', 'Gagal memproses lagu. API mungkin sedang rate-limited.');
             if (filePath && fs.existsSync(filePath)) fs.unlinkSync(filePath);
         }
     });
 });
 
-// Route pengiriman file
 app.get('/download-file/:filename', (req, res) => {
     const fileName = req.params.filename;
     const filePath = path.join(DOWNLOAD_DIR, fileName);
 
     if (fs.existsSync(filePath)) {
         res.download(filePath, fileName, (err) => {
-            if (err) console.error("❌ Error mengirim file:", err);
+            if (err) console.error("Error mengirim file:", err);
             fs.unlink(filePath, (unlinkErr) => {
-                if (unlinkErr) console.error("⚠️ Gagal menghapus file sementara:", unlinkErr);
+                if (unlinkErr) console.error("⚠️ Gagal menghapus file:", unlinkErr);
             });
         });
     } else {
@@ -148,5 +144,5 @@ app.get('/download-file/:filename', (req, res) => {
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
-    console.log(`🚀 Server SoundCloud Downloader (V2) aktif di port ${PORT}`);
+    console.log(`🚀 Server berjalan di port ${PORT}`);
 });
