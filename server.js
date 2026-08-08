@@ -42,37 +42,43 @@ io.on('connection', (socket) => {
                 let title = 'SoundCloud Audio';
                 let coverUrl = 'https://images.unsplash.com/photo-1611162617474-5b21e879e113';
 
-                const apiRes = await fetch(`https://api.soundcloud.mp3download.to/get?url=${encodeURIComponent(url)}`).catch(() => null);
-                if (apiRes && apiRes.ok) {
-                    const json = await apiRes.json();
-                    if (json && json.download_url) {
-                        downloadSourceUrl = json.download_url;
-                        if (json.title) title = json.title;
-                        if (json.cover) coverUrl = json.cover;
-                    }
-                }
-
-                if (!downloadSourceUrl) {
-                    const altRes = await fetch(`https://soundcloud-dl.a-z.workers.dev/?url=${encodeURIComponent(url)}`).catch(() => null);
-                    if (altRes && altRes.ok) {
-                        const altJson = await altRes.json();
-                        downloadSourceUrl = altJson.url || altJson.downloadUrl;
-                        if (altJson.title) title = altJson.title;
-                    }
-                }
-
-                if (!downloadSourceUrl) {
+                // Menggunakan Cobalt API yang stabil untuk SoundCloud
+                try {
                     const cobaltRes = await fetch('https://api.cobalt.tools/api/json', {
                         method: 'POST',
                         headers: {
                             'Accept': 'application/json',
-                            'Content-Type': 'application/json'
+                            'Content-Type': 'application/json',
+                            'User-Agent': 'Mozilla/5.0'
                         },
-                        body: JSON.stringify({ url: url, isAudioOnly: true })
+                        body: JSON.stringify({ 
+                            url: url, 
+                            isAudioOnly: true,
+                            filenamePattern: 'classic'
+                        })
                     });
+                    
                     const cobaltJson = await cobaltRes.json();
-                    if (cobaltJson && cobaltJson.url) {
-                        downloadSourceUrl = cobaltJson.url;
+                    if (cobaltJson && (cobaltJson.url || cobaltJson.picker)) {
+                        downloadSourceUrl = cobaltJson.url || (cobaltJson.picker[0] && cobaltJson.picker[0].url);
+                        if (cobaltJson.filename) title = cobaltJson.filename;
+                    }
+                } catch (e) {
+                    console.error("Cobalt API Error:", e);
+                }
+
+                // Fallback jika Cobalt gagal
+                if (!downloadSourceUrl) {
+                    try {
+                        const altRes = await fetch(`https://api.soundcloud.mp3download.to/get?url=${encodeURIComponent(url)}`);
+                        const altJson = await altRes.json();
+                        if (altJson && altJson.download_url) {
+                            downloadSourceUrl = altJson.download_url;
+                            if (altJson.title) title = altJson.title;
+                            if (altJson.cover) coverUrl = altJson.cover;
+                        }
+                    } catch (e) {
+                        console.error("Fallback API Error:", e);
                     }
                 }
 
