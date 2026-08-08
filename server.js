@@ -18,7 +18,7 @@ if (!fs.existsSync(DOWNLOAD_DIR)) {
     fs.mkdirSync(DOWNLOAD_DIR, { recursive: true });
 }
 
-// Fungsi untuk memastikan Client ID SoundCloud selalu segar (Fresh)
+// Fungsi memastikan koneksi Client ID
 async function ensureScdlConnection() {
     try {
         await scdl.connect();
@@ -28,11 +28,26 @@ async function ensureScdlConnection() {
         return false;
     }
 }
-
-// Inisialisasi awal
 ensureScdlConnection().then(success => {
     if (success) console.log('✅ Berhasil terhubung ke SoundCloud API');
 });
+
+// Fungsi Ekstraktor URL Tingkat Lanjut (Bypass Mobile URL)
+async function resolveAndFormatUrl(shortUrl) {
+    try {
+        // Ambil URL tujuan asli
+        const response = await fetch(shortUrl, { method: 'GET', redirect: 'follow' });
+        let finalUrl = response.url;
+        
+        // [KUNCI PERBAIKAN]: Paksa ubah m.soundcloud (mobile) jadi versi desktop
+        finalUrl = finalUrl.replace('m.soundcloud.com', 'soundcloud.com');
+        
+        // Hapus parameter pelacakan (seperti ?si=...)
+        return finalUrl.split('?')[0]; 
+    } catch (err) {
+        throw new Error('Gagal mengekstrak URL');
+    }
+}
 
 io.on('connection', (socket) => {
     console.log('🔗 Client terhubung:', socket.id);
@@ -48,46 +63,41 @@ io.on('connection', (socket) => {
 
             socket.emit('info', 'Memverifikasi link...');
 
-            // 1. Bersihkan & Format URL
             let url = inputUrl.trim();
             if (!/^https?:\/\//i.test(url)) {
                 url = 'https://' + url;
             }
 
-            // 2. Ekstrak Shortlink (on.soundcloud.com)
+            // Ekstrak jika itu link pendek, jika tidak langsung format
             if (url.includes('on.soundcloud.com')) {
                 socket.emit('info', 'Mengekstrak link pendek...');
                 try {
-                    // Menggunakan metode GET alih-alih HEAD agar redirect terbaca sempurna
-                    const response = await fetch(url, { method: 'GET', redirect: 'follow' });
-                    finalUrl = response.url.split('?')[0]; // Ambil URL asli dan buang parameter pelacakan
-                    console.log('🔄 Link terekstrak menjadi:', finalUrl);
+                    finalUrl = await resolveAndFormatUrl(url);
+                    console.log('🔄 Link terekstrak & diformat menjadi:', finalUrl);
                 } catch (err) {
-                    console.error('❌ Error ekstrak URL:', err);
                     return socket.emit('error', 'Gagal memproses link pendek. Coba gunakan link panjang dari browser.');
                 }
             } else {
-                finalUrl = url.split('?')[0];
+                // Walau bukan link pendek, tetap paksa ubah mobile ke desktop
+                finalUrl = url.replace('m.soundcloud.com', 'soundcloud.com').split('?')[0];
             }
 
-            // 3. Validasi Link Panjang Final
-            const scRegex = /^https?:\/\/(www\.)?soundcloud\.com\/[\w-]+\/[\w-]+/i;
+            // Regex baru yang lebih toleran namun tetap aman
+            const scRegex = /^https?:\/\/(www\.)?soundcloud\.com\/[\w-]+\/.+/i;
             if (!scRegex.test(finalUrl)) {
                 return socket.emit('error', 'Format link SoundCloud tidak valid atau tidak dikenali.');
             }
 
             socket.emit('info', 'Menghubungkan ke server SoundCloud...');
-
-            // 4. Pastikan Koneksi SoundCloud Aktif sebelum mengambil info
             await ensureScdlConnection();
 
-            // 5. Ambil Info Lagu
             let trackInfo;
             try {
+                // Ambil info menggunakan URL Desktop yang bersih
                 trackInfo = await scdl.getInfo(finalUrl);
             } catch (infoErr) {
-                console.error('❌ Gagal ambil info:', infoErr.message);
-                return socket.emit('error', 'Gagal menemukan lagu. Pastikan lagu tersebut bersifat Publik (bukan Private).');
+                console.error('❌ Gagal ambil info:', infoErr);
+                return socket.emit('error', 'Gagal mengambil lagu dari server SoundCloud. Link mungkin kadaluarsa atau koneksi API diblokir sementara.');
             }
 
             const title = (trackInfo.title || 'SoundCloud_Audio').replace(/[^a-zA-Z0-9_\-\s]/g, "").trim();
@@ -96,12 +106,10 @@ io.on('connection', (socket) => {
 
             socket.emit('info', `Mulai mengunduh: ${title}...`);
 
-            // 6. Mulai Proses Streaming & Unduhan
             const stream = await scdl.download(finalUrl);
             const fileStream = fs.createWriteStream(filePath);
 
             const durationSec = (trackInfo.duration || 0) / 1000;
-            // Estimasi ukuran file (Bitrate rata-rata SC adalah 128kbps)
             const estimatedSize = durationSec > 0 ? (128 * 1000 * durationSec) / 8 : 5 * 1024 * 1024;
 
             let downloaded = 0;
@@ -113,21 +121,14 @@ io.on('connection', (socket) => {
                 
                 const speedBps = downloaded / elapsedTime;
                 const speedMBps = (speedBps / (1024 * 1024)).toFixed(2);
-                
                 const progress = Math.min((downloaded / estimatedSize) * 100, 99).toFixed(1);
                 const remainingBytes = estimatedSize - downloaded;
                 const etaSec = remainingBytes > 0 && speedBps > 0 ? (remainingBytes / speedBps).toFixed(0) : 0;
-                
                 const sizeMB = (estimatedSize / (1024 * 1024)).toFixed(2);
                 const downloadedMB = (downloaded / (1024 * 1024)).toFixed(2);
 
                 socket.emit('progress', {
-                    progress,
-                    speedMBps,
-                    etaSec,
-                    downloadedMB,
-                    sizeMB,
-                    title: title
+                    progress, speedMBps, etaSec, downloadedMB, sizeMB, title
                 });
             });
 
@@ -135,13 +136,7 @@ io.on('connection', (socket) => {
 
             fileStream.on('finish', () => {
                 console.log(`✅ Unduhan selesai: ${fileName}`);
-                socket.emit('progress', { 
-                    progress: 100, 
-                    speedMBps: "0.00", 
-                    etaSec: 0, 
-                    title: title 
-                });
-                
+                socket.emit('progress', { progress: 100, speedMBps: "0.00", etaSec: 0, title });
                 socket.emit('done', {
                     downloadUrl: `/download-file/${encodeURIComponent(fileName)}`,
                     fileName
@@ -150,7 +145,7 @@ io.on('connection', (socket) => {
 
             stream.on('error', (err) => {
                 console.error('❌ Stream error:', err);
-                socket.emit('error', 'Terjadi kesalahan saat memproses audio. Silakan coba lagi.');
+                socket.emit('error', 'Terjadi kesalahan jaringan saat mengunduh audio.');
                 if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
             });
 
@@ -162,23 +157,19 @@ io.on('connection', (socket) => {
     });
 });
 
-// Route untuk mengirim file ke User
 app.get('/download-file/:filename', (req, res) => {
     const fileName = req.params.filename;
     const filePath = path.join(DOWNLOAD_DIR, fileName);
 
     if (fs.existsSync(filePath)) {
         res.download(filePath, fileName, (err) => {
-            if (err) {
-                console.error("❌ Error mengirim file ke client:", err);
-            }
-            // Hapus file dari server setelah sukses diunduh client agar storage tidak penuh
+            if (err) console.error("❌ Error mengirim file:", err);
             fs.unlink(filePath, (unlinkErr) => {
-                if (unlinkErr) console.error("⚠️ Gagal menghapus file temp:", unlinkErr);
+                if (unlinkErr) console.error("⚠️ Gagal menghapus file:", unlinkErr);
             });
         });
     } else {
-        res.status(404).send('File sudah kadaluarsa atau tidak ditemukan. Silakan unduh ulang dari awal.');
+        res.status(404).send('File sudah kadaluarsa atau tidak ditemukan.');
     }
 });
 
