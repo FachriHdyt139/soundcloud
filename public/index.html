@@ -26,24 +26,23 @@
 </head>
 <body class="flex flex-col items-center justify-between p-4">
 
-    <!-- Header / Anime Mascot Section -->
+    <!-- Header / Mascot Section -->
     <div class="text-center mt-4">
         <div class="relative inline-block anime-float">
-            <!-- Gambar Anime Bergerak yang Stabil & Pasti Muncul -->
-<img src="https://media1.giphy.com/media/v1.Y2lkPTc5MGI3NjExM3Z2bzJpYW5oajVvZGR5dGNha3JjZ2VvNnd4Y2R4OG9nb2EwbzBwayZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/Lq0h93752f6J9tijrh/giphy.gif" alt="Anime Mascot" class="w-28 h-28 object-cover rounded-full border-4 border-pink-500 shadow-lg shadow-pink-500/50 mx-auto">
+            <img src="https://media1.giphy.com/media/v1.Y2lkPTc5MGI3NjExM3Z2bzJpYW5oajVvZGR5dGNha3JjZ2VvNnd4Y2R4OG9nb2EwbzBwayZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/Lq0h93752f6J9tijrh/giphy.gif" alt="Mascot" class="w-28 h-28 object-cover rounded-full border-4 border-pink-500 shadow-lg shadow-pink-500/50 mx-auto">
             <span class="absolute bottom-0 right-0 bg-pink-600 text-xs px-2 py-0.5 rounded-full font-bold animate-pulse">LIVE</span>
         </div>
         <h1 class="text-2xl font-black mt-2 tracking-wider bg-gradient-to-r from-pink-400 to-purple-400 bg-clip-text text-transparent">MEDIA DOWNLOADER</h1>
         <p class="text-xs text-slate-400">Unduh Musik & Video Favoritmu Praktis & Gratis</p>
         <div class="inline-block bg-slate-800/80 border border-slate-700 px-3 py-1 rounded-full text-xs mt-2 text-yellow-400 font-semibold shadow">
-            🔥 Total Unduhan: <span id="total-downloads">1241</span>
+            🔥 Total Unduhan: <span id="total-downloads">1243</span>
         </div>
     </div>
 
     <!-- MAIN CONTAINER -->
     <div class="w-full max-w-md bg-slate-900/90 backdrop-blur-md border border-slate-800 p-5 rounded-2xl shadow-2xl my-4">
         
-        <!-- PLATFORM SELECTION TABS (Tombol Pilihan di Atas) -->
+        <!-- PLATFORM SELECTION TABS -->
         <div class="grid grid-cols-2 gap-2 bg-slate-800 p-1.5 rounded-xl mb-5">
             <button id="tab-soundcloud" onclick="switchPlatform('soundcloud')" class="py-2.5 rounded-lg text-sm font-bold transition-all duration-300 bg-gradient-to-r from-orange-500 to-amber-600 text-white shadow-md">
                 <i class="fa-brands fa-soundcloud mr-1.5"></i> SoundCloud
@@ -66,13 +65,21 @@
             </button>
         </div>
 
+        <!-- PREVIEW BOX (Thumbnail & Judul) -->
+        <div id="preview-box" class="mt-4 hidden bg-slate-950 border border-slate-800 rounded-xl p-3 flex items-center space-x-3">
+            <img id="preview-img" src="" alt="Thumbnail" class="w-16 h-16 object-cover rounded-lg border border-slate-700 shadow flex-shrink-0">
+            <div class="overflow-hidden">
+                <p class="text-[10px] text-pink-400 font-semibold uppercase tracking-wider">Judul Media:</p>
+                <h3 id="preview-title" class="text-xs text-white font-bold truncate max-w-[220px]">Memuat judul...</h3>
+            </div>
+        </div>
+
         <!-- STATUS / LOG BOX -->
         <div id="status-box" class="mt-4 hidden bg-slate-950 border border-slate-800 rounded-xl p-3.5 text-xs space-y-2">
             <div class="flex justify-between text-slate-400">
                 <span id="status-title" class="truncate max-w-[200px] text-pink-400 font-semibold">Menghubungkan...</span>
                 <span id="progress-text">0%</span>
             </div>
-            <!-- Progress Bar -->
             <div class="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
                 <div id="progress-bar" class="bg-gradient-to-r from-pink-500 to-purple-500 h-full w-0 transition-all duration-200"></div>
             </div>
@@ -115,7 +122,7 @@
                 scBtn.className = "py-2.5 rounded-lg text-sm font-bold transition-all duration-300 bg-gradient-to-r from-orange-500 to-amber-600 text-white shadow-md";
                 tkBtn.className = "py-2.5 rounded-lg text-sm font-bold transition-all duration-300 text-slate-400 hover:text-white";
                 inputLabel.innerText = "Tempel Link SoundCloud:";
-                urlInput.placeholder = "https://soundcloud.com/..." ;
+                urlInput.placeholder = "https://soundcloud.com/...";
             } else {
                 tkBtn.className = "py-2.5 rounded-lg text-sm font-bold transition-all duration-300 bg-gradient-to-r from-cyan-500 to-blue-600 text-white shadow-md";
                 scBtn.className = "py-2.5 rounded-lg text-sm font-bold transition-all duration-300 text-slate-400 hover:text-white";
@@ -128,6 +135,7 @@
             document.getElementById('status-box').classList.add('hidden');
             document.getElementById('error-box').classList.add('hidden');
             document.getElementById('result-box').classList.add('hidden');
+            document.getElementById('preview-box').classList.add('hidden');
             document.getElementById('progress-bar').style.width = '0%';
         }
 
@@ -155,6 +163,16 @@
             document.getElementById('btn-text').innerText = "Unduh Sekarang";
         }
 
+        socket.on('preview', (data) => {
+            const previewBox = document.getElementById('preview-box');
+            const previewImg = document.getElementById('preview-img');
+            const previewTitle = document.getElementById('preview-title');
+
+            previewImg.src = data.coverUrl;
+            previewTitle.innerText = data.title;
+            previewBox.classList.remove('hidden');
+        });
+
         socket.on('info', (msg) => {
             document.getElementById('status-title').innerText = msg;
         });
@@ -164,9 +182,6 @@
             document.getElementById('progress-text').innerText = `${data.progress}%`;
             document.getElementById('speed-text').innerText = `Kecepatan: ${data.speedMBps} MB/s`;
             document.getElementById('eta-text').innerText = `Estimasi: ${data.etaSec}s`;
-            if(data.title) {
-                document.getElementById('status-title').innerText = data.title;
-            }
         });
 
         socket.on('done', (data) => {
