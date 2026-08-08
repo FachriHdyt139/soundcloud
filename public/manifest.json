@@ -1,0 +1,15 @@
+{
+  "name": "SoundCloud Downloader Pro",
+  "short_name": "SC Downloader",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#09090b",
+  "theme_color": "#ff5500",
+  "icons": [
+    {
+      "src": "https://cdn-icons-png.flaticon.com/512/3670/3670151.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
