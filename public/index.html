@@ -3,182 +3,190 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SoundCloud Downloader Pro</title>
-    
-    <!-- PWA Manifest & Theme -->
-    <link rel="manifest" href="manifest.json">
-    <meta name="theme-color" content="#ff5500">
-    
-    <!-- Tailwind CSS CDN -->
-    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <title>Media Downloader Pro - By @FACHRI_HDYT</title>
+    <script src="https://cdn.tailwindcss.com"></script>
     <script src="/socket.io/socket.io.js"></script>
-    
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
-        @keyframes shimmer {
-            0% { background-position: -200% 0; }
-            100% { background-position: 200% 0; }
+        @keyframes floatAnime {
+            0%, 100% { transform: translateY(0px) rotate(0deg); }
+            50% { transform: translateY(-10px) rotate(2deg); }
         }
-        .skeleton {
-            background: linear-gradient(90deg, #1f2937 25%, #374151 50%, #1f2937 75%);
-            background-size: 200% 100%;
-            animation: shimmer 1.5s infinite;
+        .anime-float {
+            animation: floatAnime 4s ease-in-out infinite;
+        }
+        body {
+            background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 50%, #311042 100%);
+            min-height: 100vh;
+            color: #f8fafc;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            overflow-x: hidden;
         }
     </style>
 </head>
-<body class="bg-zinc-950 text-white min-h-screen flex flex-col items-center justify-center p-4">
+<body class="flex flex-col items-center justify-between p-4">
 
-    <div class="w-full max-w-md bg-zinc-900/80 backdrop-blur-md border border-zinc-800 p-6 rounded-2xl shadow-2xl">
-        
-        <!-- Header -->
-        <div class="text-center mb-6">
-            <div class="inline-block p-3 bg-orange-500/10 rounded-full mb-2">
-                <svg class="w-8 h-8 text-orange-500" fill="currentColor" viewBox="0 0 24 24"><path d="M11.5 6C8.46 6 6 8.46 6 11.5c0 .34.04.67.11 1H5a2 2 0 00-2 2v3a2 2 0 002 2h1v-4a4 4 0 018 0v4h1a2 2 0 002-2v-3a2 2 0 00-2-2h-1.11c.07-.33.11-.66.11-1C17 8.46 14.54 6 11.5 6z"/></svg>
-            </div>
-            <h1 class="text-2xl font-bold tracking-tight">SoundCloud Downloader</h1>
-            <p class="text-xs text-zinc-400 mt-1">Unduh lagu favoritmu secara praktis & gratis</p>
-            
-            <!-- Live Counter Badge -->
-            <div class="mt-3 inline-flex items-center gap-1.5 px-3 py-1 bg-zinc-800/60 border border-zinc-700/50 rounded-full text-xs text-orange-400">
-                <span class="w-2 h-2 rounded-full bg-orange-500 animate-ping"></span>
-                <span id="counter-text">Total Unduhan: Memuat...</span>
-            </div>
+    <!-- Header / Anime Mascot Section -->
+    <div class="text-center mt-4">
+        <div class="relative inline-block anime-float">
+            <!-- Gambar Anime Bergerak (Ganti URL gambar sesuai selera) -->
+            <img src="https://i.pinimg.com/originals/23/51/66/235166299849202161f74df3b1e32dc4.gif" alt="Anime Mascot" class="w-28 h-28 object-cover rounded-full border-4 border-pink-500 shadow-lg shadow-pink-500/50 mx-auto">
+            <span class="absolute bottom-0 right-0 bg-pink-600 text-xs px-2 py-0.5 rounded-full font-bold animate-pulse">LIVE</span>
         </div>
+        <h1 class="text-2xl font-black mt-2 tracking-wider bg-gradient-to-r from-pink-400 to-purple-400 bg-clip-text text-transparent">MEDIA DOWNLOADER</h1>
+        <p class="text-xs text-slate-400">Unduh Musik & Video Favoritmu Praktis & Gratis</p>
+        <div class="inline-block bg-slate-800/80 border border-slate-700 px-3 py-1 rounded-full text-xs mt-2 text-yellow-400 font-semibold shadow">
+            🔥 Total Unduhan: <span id="total-downloads">1241</span>
+        </div>
+    </div>
 
-        <!-- Form Input -->
-        <div class="space-y-4">
-            <input type="text" id="urlInput" placeholder="Tempel link SoundCloud atau YouTube di sini..." 
-    class="w-full px-4 py-3 bg-zinc-950 border border-zinc-800 rounded-xl focus:outline-none focus:border-orange-500 text-sm transition">
-            
-            <button id="downloadBtn" onclick="startDownload()" 
-                class="w-full py-3 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 font-semibold rounded-xl transition shadow-lg shadow-orange-500/20 cursor-pointer">
-                🚀 Unduh Sekarang
+    <!-- MAIN CONTAINER -->
+    <div class="w-full max-w-md bg-slate-900/90 backdrop-blur-md border border-slate-800 p-5 rounded-2xl shadow-2xl my-4">
+        
+        <!-- PLATFORM SELECTION TABS (Tombol Pilihan di Atas) -->
+        <div class="grid grid-cols-2 gap-2 bg-slate-800 p-1.5 rounded-xl mb-5">
+            <button id="tab-soundcloud" onclick="switchPlatform('soundcloud')" class="py-2.5 rounded-lg text-sm font-bold transition-all duration-300 bg-gradient-to-r from-orange-500 to-amber-600 text-white shadow-md">
+                <i class="fa-brands fa-soundcloud mr-1.5"></i> SoundCloud
+            </button>
+            <button id="tab-tiktok" onclick="switchPlatform('tiktok')" class="py-2.5 rounded-lg text-sm font-bold transition-all duration-300 text-slate-400 hover:text-white">
+                <i class="fa-brands fa-tiktok mr-1.5"></i> TikTok
             </button>
         </div>
 
-        <!-- SKELETON LOADING (Hidden secara default) -->
-        <div id="skeletonLoader" class="hidden mt-6 space-y-3 p-4 bg-zinc-950/50 rounded-xl border border-zinc-800/80">
-            <div class="flex items-center space-x-3">
-                <div class="w-10 h-10 rounded-lg skeleton"></div>
-                <div class="flex-1 space-y-2">
-                    <div class="h-4 rounded skeleton w-3/4"></div>
-                    <div class="h-3 rounded skeleton w-1/2"></div>
-                </div>
+        <!-- INPUT FORM -->
+        <div class="space-y-3">
+            <div>
+                <label id="input-label" class="block text-xs font-semibold text-slate-400 mb-1">Tempel Link SoundCloud:</label>
+                <input type="text" id="url-input" placeholder="https://soundcloud.com/..." class="w-full bg-slate-950 border border-slate-700 focus:border-pink-500 rounded-xl px-4 py-3 text-sm text-white outline-none transition">
             </div>
-            <div class="h-2 rounded-full skeleton w-full mt-4"></div>
+
+            <button onclick="startDownload()" id="download-btn" class="w-full bg-gradient-to-r from-pink-500 to-purple-600 hover:from-pink-600 hover:to-purple-700 text-white font-bold py-3.5 rounded-xl transition shadow-lg shadow-pink-500/30 flex items-center justify-center space-x-2">
+                <i class="fa-solid fa-rocket"></i>
+                <span id="btn-text">Unduh Sekarang</span>
+            </button>
         </div>
 
-        <!-- Progress Section -->
-        <div id="progressSection" class="hidden mt-6 space-y-3 p-4 bg-zinc-950 rounded-xl border border-zinc-800">
-            <div class="flex justify-between text-xs text-zinc-400">
-                <span id="statusText" class="truncate max-w-[200px]">Memproses...</span>
-                <span id="progressPercent">0%</span>
+        <!-- STATUS / LOG BOX -->
+        <div id="status-box" class="mt-4 hidden bg-slate-950 border border-slate-800 rounded-xl p-3.5 text-xs space-y-2">
+            <div class="flex justify-between text-slate-400">
+                <span id="status-title" class="truncate max-w-[200px] text-pink-400 font-semibold">Menghubungkan...</span>
+                <span id="progress-text">0%</span>
             </div>
-            <div class="w-full bg-zinc-800 h-2 rounded-full overflow-hidden">
-                <div id="progressBar" class="bg-orange-500 h-full w-0 transition-all duration-200"></div>
+            <!-- Progress Bar -->
+            <div class="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
+                <div id="progress-bar" class="bg-gradient-to-r from-pink-500 to-purple-500 h-full w-0 transition-all duration-200"></div>
             </div>
-            <div class="flex justify-between text-[11px] text-zinc-500 font-mono">
-                <span id="speedText">0.00 MB/s</span>
-                <span id="etaText">0s tersisa</span>
+            <div class="flex justify-between text-[10px] text-slate-500">
+                <span id="speed-text">Kecepatan: 0.00 MB/s</span>
+                <span id="eta-text">Estimasi: 0s</span>
             </div>
         </div>
 
-        <!-- Result Section -->
-        <div id="resultSection" class="hidden mt-6 text-center">
-            <a id="downloadLink" href="#" class="inline-block w-full py-3 bg-emerald-600 hover:bg-emerald-700 font-semibold rounded-xl transition shadow-lg shadow-emerald-600/20">
-                📥 Simpan File ke Perangkat
+        <!-- ERROR MESSAGE -->
+        <div id="error-box" class="mt-4 hidden bg-red-950/50 border border-red-800/80 text-red-300 p-3 rounded-xl text-xs text-center"></div>
+
+        <!-- RESULT DOWNLOAD LINK -->
+        <div id="result-box" class="mt-4 hidden text-center">
+            <a id="download-link" href="#" class="inline-block w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-xl shadow-lg transition">
+                <i class="fa-solid fa-download mr-2"></i> Simpan ke Perangkat
             </a>
         </div>
-
-        <div id="errorText" class="hidden mt-4 p-3 bg-red-500/10 border border-red-500/20 text-red-400 text-xs text-center rounded-xl"></div>
     </div>
 
-    <footer class="mt-8 text-xs text-zinc-600 text-center">
-        Created with ❤️ by <span class="text-zinc-400">@FACHRI_HDYT</span>
+    <!-- Footer -->
+    <footer class="text-xs text-slate-500 text-center mb-2">
+        Created with <span class="text-pink-500">❤️</span> by <span class="font-semibold text-slate-400">@FACHRI_HDYT</span>
     </footer>
 
-    <!-- Client Script -->
     <script>
         const socket = io();
+        let currentPlatform = 'soundcloud';
 
-        // Ambil Live Counter awal via REST API
-        fetch('/api/stats')
-            .then(res => res.json())
-            .then(data => {
-                document.getElementById('counter-text').innerText = `Total Unduhan: ${data.totalDownloads.toLocaleString()}`;
-            });
+        function switchPlatform(platform) {
+            currentPlatform = platform;
+            const scBtn = document.getElementById('tab-soundcloud');
+            const tkBtn = document.getElementById('tab-tiktok');
+            const inputLabel = document.getElementById('input-label');
+            const urlInput = document.getElementById('url-input');
 
-            // Update Live Counter secara realtime via Socket.io
-        socket.on('update_counter', (data) => {
-            document.getElementById('counter-text').innerText = `Total Unduhan: ${data.totalDownloads.toLocaleString()}`;
-        });
+            resetUI();
+
+            if (platform === 'soundcloud') {
+                scBtn.className = "py-2.5 rounded-lg text-sm font-bold transition-all duration-300 bg-gradient-to-r from-orange-500 to-amber-600 text-white shadow-md";
+                tkBtn.className = "py-2.5 rounded-lg text-sm font-bold transition-all duration-300 text-slate-400 hover:text-white";
+                inputLabel.innerText = "Tempel Link SoundCloud:";
+                urlInput.placeholder = "https://soundcloud.com/..." ;
+            } else {
+                tkBtn.className = "py-2.5 rounded-lg text-sm font-bold transition-all duration-300 bg-gradient-to-r from-cyan-500 to-blue-600 text-white shadow-md";
+                scBtn.className = "py-2.5 rounded-lg text-sm font-bold transition-all duration-300 text-slate-400 hover:text-white";
+                inputLabel.innerText = "Tempel Link TikTok (Contoh: vt.tiktok.com/...):";
+                urlInput.placeholder = "https://vt.tiktok.com/...";
+            }
+        }
+
+        function resetUI() {
+            document.getElementById('status-box').classList.add('hidden');
+            document.getElementById('error-box').classList.add('hidden');
+            document.getElementById('result-box').classList.add('hidden');
+            document.getElementById('progress-bar').style.width = '0%';
+        }
 
         function startDownload() {
-            const url = document.getElementById('urlInput').value.trim();
-            if (!url) return alert('Masukkan link SoundCloud terlebih dahulu!');
+            const url = document.getElementById('url-input').value.trim();
+            if (!url) {
+                showError("Link tidak boleh kosong!");
+                return;
+            }
 
-            // Reset UI
-            document.getElementById('errorText').classList.add('hidden');
-            document.getElementById('progressSection').classList.add('hidden');
-            document.getElementById('resultSection').classList.add('hidden');
-            
-            // Tampilkan Skeleton Loading
-            document.getElementById('skeletonLoader').classList.remove('hidden');
-            document.getElementById('downloadBtn').disabled = true;
-            document.getElementById('downloadBtn').classList.add('opacity-50', 'cursor-not-allowed');
+            resetUI();
+            document.getElementById('status-box').classList.remove('hidden');
+            document.getElementById('download-btn').disabled = true;
+            document.getElementById('btn-text').innerText = "Memproses...";
 
-            socket.emit('start_download', url);
+            socket.emit('start_download', { url, platform: currentPlatform });
+        }
+
+        function showError(msg) {
+            const errBox = document.getElementById('error-box');
+            errBox.innerText = msg;
+            errBox.classList.remove('hidden');
+            document.getElementById('status-box').classList.add('hidden');
+            document.getElementById('download-btn').disabled = false;
+            document.getElementById('btn-text').innerText = "Unduh Sekarang";
         }
 
         socket.on('info', (msg) => {
-            // Sembunyikan skeleton dan tampilkan progress bar biasa saat info masuk
-            document.getElementById('skeletonLoader').classList.add('hidden');
-            document.getElementById('progressSection').classList.remove('hidden');
-            document.getElementById('statusText').innerText = msg;
+            document.getElementById('status-title').innerText = msg;
         });
 
         socket.on('progress', (data) => {
-            document.getElementById('skeletonLoader').classList.add('hidden');
-            document.getElementById('progressSection').classList.remove('hidden');
-            document.getElementById('statusText').innerText = data.title;
-            document.getElementById('progressPercent').innerText = `${data.progress}%`;
-            document.getElementById('progressBar').style.width = `${data.progress}%`;
-            document.getElementById('speedText').innerText = `${data.speedMBps} MB/s`;
-            document.getElementById('etaText').innerText = `${data.etaSec}s tersisa`;
+            document.getElementById('progress-bar').style.width = `${data.progress}%`;
+            document.getElementById('progress-text').innerText = `${data.progress}%`;
+            document.getElementById('speed-text').innerText = `Kecepatan: ${data.speedMBps} MB/s`;
+            document.getElementById('eta-text').innerText = `Estimasi: ${data.etaSec}s`;
+            if(data.title) {
+                document.getElementById('status-title').innerText = data.title;
+            }
         });
 
         socket.on('done', (data) => {
-            document.getElementById('skeletonLoader').classList.add('hidden');
-            document.getElementById('progressSection').classList.add('hidden');
-            document.getElementById('resultSection').classList.remove('hidden');
-            
-            const dlLink = document.getElementById('downloadLink');
-            dlLink.href = data.downloadUrl;
-            dlLink.setAttribute('download', data.fileName);
-
-            const btn = document.getElementById('downloadBtn');
-            btn.disabled = false;
-            btn.classList.remove('opacity-50', 'cursor-not-allowed');
-            btn.innerText = '✨ Unduh Lagi';
+            document.getElementById('status-box').classList.add('hidden');
+            const resBox = document.getElementById('result-box');
+            const link = document.getElementById('download-link');
+            link.href = data.downloadUrl;
+            link.download = data.fileName;
+            resBox.classList.remove('hidden');
+            document.getElementById('download-btn').disabled = false;
+            document.getElementById('btn-text').innerText = "Unduh Sekarang";
         });
 
-        socket.on('error', (err) => {
-            document.getElementById('skeletonLoader').classList.add('hidden');
-            document.getElementById('progressSection').classList.add('hidden');
-            const errDiv = document.getElementById('errorText');
-            errDiv.innerText = err;
-            errDiv.classList.remove('hidden');
-
-            const btn = document.getElementById('downloadBtn');
-            btn.disabled = false;
-            btn.classList.remove('opacity-50', 'cursor-not-allowed');
+        socket.on('error', (errMsg) => {
+            showError(errMsg);
         });
 
-        // Register Service Worker untuk PWA
-        if ('serviceWorker' in navigator) {
-            window.addEventListener('load', () => {
-                navigator.serviceWorker.register('/sw.js').catch(err => console.log('SW registration failed: ', err));
-            });
-        }
+        socket.on('update_counter', (data) => {
+            document.getElementById('total-downloads').innerText = data.totalDownloads;
+        });
     </script>
 </body>
 </html>
