@@ -1,7 +1,7 @@
 {
   "name": "media-downloader-pro",
-  "version": "2.0.0",
-  "description": "SoundCloud & TikTok Downloader Pro - Enterprise Edition",
+  "version": "3.0.0",
+  "description": "All-in-One Media Downloader Pro - Enterprise Edition",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
