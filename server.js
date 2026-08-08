@@ -38,42 +38,36 @@ io.on('connection', (socket) => {
             if (platform === 'soundcloud') {
                 socket.emit('info', 'Memproses link SoundCloud...');
                 
+                let targetUrl = url;
+                
+                // Jika menggunakan link pendek on.soundcloud.com, ambil URL aslinya dulu
+                if (url.includes('on.soundcloud.com')) {
+                    try {
+                        const redirectRes = await fetch(url, { redirect: 'follow' });
+                        targetUrl = redirectRes.url;
+                    } catch (e) {
+                        console.error("Gagal resolve link pendek:", e);
+                    }
+                }
+
                 let downloadSourceUrl = '';
                 let title = 'SoundCloud Audio';
                 let coverUrl = 'https://images.unsplash.com/photo-1611162617474-5b21e879e113';
 
-                // Menggunakan Cobalt API v10/v7 publik yang stabil
                 try {
-                    const cobaltRes = function() {
-                        return fetch('https://co.wuk.sh/api/json', {
-                            method: 'POST',
-                            headers: {
-                                'Accept': 'application/json',
-                                'Content-Type': 'application/json'
-                            },
-                            body: JSON.stringify({ 
-                                url: url, 
-                                isAudioOnly: true 
-                            })
-                        });
-                    };
-
-                    let res = await cobaltRes();
-                    let json = await res.json();
-
-                    if (!json || !json.url) {
-                        // Coba endpoint alternatif cobalt
-                        const altCobalt = await fetch('https://api.cobalt.tools/api/json', {
-                            method: 'POST',
-                            headers: {
-                                'Accept': 'application/json',
-                                'Content-Type': 'application/json'
-                            },
-                            body: JSON.stringify({ url: url, isAudioOnly: true })
-                        });
-                        json = await altCobalt.json();
-                    }
-
+                    const cobaltRes = await fetch('https://api.cobalt.tools/api/json', {
+                        method: 'POST',
+                        headers: {
+                            'Accept': 'application/json',
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({ 
+                            url: targetUrl, 
+                            isAudioOnly: true 
+                        })
+                    });
+                    
+                    const json = await cobaltRes.json();
                     if (json && json.url) {
                         downloadSourceUrl = json.url;
                         if (json.filename) title = json.filename;
