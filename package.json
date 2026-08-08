@@ -1,7 +1,7 @@
 {
   "name": "media-downloader-pro",
   "version": "1.0.0",
-  "description": "SoundCloud Downloader & Media Hub",
+  "description": "SoundCloud & TikTok Downloader Pro",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
