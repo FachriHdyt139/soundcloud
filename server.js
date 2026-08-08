@@ -40,23 +40,24 @@ io.on('connection', (socket) => {
             }
 
             // ==========================================
-            // 1. SOUNDCLOUD DOWNLOADER (Stabil & Native)
+            // 1. SOUNDCLOUD DOWNLOADER (Fix Short Link & Direct Stream)
             // ==========================================
             if (platform === 'soundcloud') {
                 socket.emit('info', 'Memproses link SoundCloud...');
                 
-                // Mendukung link pendek on.soundcloud.com atau link panjang
-                let finalUrl = url;
-                try {
-                    const infoTest = await scdl.getInfo(url);
-                    if (infoTest && infoTest.permalink_url) {
-                        finalUrl = infoTest.permalink_url;
+                let resolvedUrl = url;
+                
+                // Jika menggunakan link pendek on.soundcloud.com, ambil URL aslinya dari redirect header
+                if (url.includes('on.soundcloud.com')) {
+                    try {
+                        const response = await fetch(url, { redirect: 'follow' });
+                        resolvedUrl = response.url;
+                    } catch (e) {
+                        console.error('Gagal resolve redirect SoundCloud:', e);
                     }
-                } catch (e) {
-                    // Jika gagal cek langsung, biarkan menggunakan URL asli
                 }
 
-                const trackInfo = await scdl.getInfo(finalUrl).catch(() => null);
+                const trackInfo = await scdl.getInfo(resolvedUrl).catch(() => null);
                 if (!trackInfo) {
                     return socket.emit('error', 'Gagal memproses link SoundCloud. Pastikan link benar.');
                 }
@@ -71,7 +72,7 @@ io.on('connection', (socket) => {
                 filePath = path.join(DOWNLOAD_DIR, fileName);
 
                 socket.emit('info', 'Mengunduh file SoundCloud...');
-                const stream = await scdl.download(finalUrl);
+                const stream = await scdl.download(resolvedUrl);
                 const fileStream = fs.createWriteStream(filePath);
                 stream.pipe(fileStream);
 
@@ -162,7 +163,7 @@ io.on('connection', (socket) => {
                     socket.emit('done', { downloadUrl: `/download-file/${encodeURIComponent(fileName)}`, fileName, title, coverUrl });
                 });
             } else {
-                socket.emit('error', 'Platform ini telah dinonaktifkan.');
+                socket.emit('error', 'Platform ini tidak didukung.');
             }
 
         } catch (error) {
