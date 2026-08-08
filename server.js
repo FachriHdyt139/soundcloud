@@ -18,7 +18,6 @@ if (!fs.existsSync(DOWNLOAD_DIR)) {
     fs.mkdirSync(DOWNLOAD_DIR, { recursive: true });
 }
 
-// Inisialisasi koneksi awal SoundCloud
 let isScdlConnected = false;
 async function initScdl() {
     try {
@@ -34,29 +33,55 @@ initScdl();
 io.on('connection', (socket) => {
     console.log('Client terhubung:', socket.id);
 
-    socket.on('start_download', async (url) => {
+    socket.on('start_download', async (inputUrl) => {
         try {
-            // Regex untuk validasi URL SoundCloud (Termasuk link pendek on.soundcloud.com)
-const scRegex = /^(https?:\/\/)?(www\.)?(soundcloud\.com|on\.soundcloud\.com)\/.+$/;
+            if (!inputUrl) {
+                return socket.emit('error', 'URL tidak boleh kosong!');
+            }
 
-if (!url || !scRegex.test(url)) {
-    return socket.emit('error', 'URL SoundCloud tidak valid!');
-}
+            let url = inputUrl.trim();
+            if (!/^https?:\/\//i.test(url)) {
+                url = 'https://' + url;
+            }
+
+            let finalUrl = url;
+
+            // [FITUR BARU] Mengekstrak link on.soundcloud.com menjadi link asli
+            if (url.includes('on.soundcloud.com')) {
+                socket.emit('info', 'Mengekstrak link pendek...');
+                try {
+                    const response = await fetch(url, { method: 'HEAD', redirect: 'follow' });
+                    finalUrl = response.url; // Mendapatkan link panjang aslinya
+                    
+                    // Membersihkan parameter tambahan (misal: ?si=xxx)
+                    finalUrl = finalUrl.split('?')[0]; 
+                    console.log('Link berhasil diekstrak menjadi:', finalUrl);
+                } catch (err) {
+                    console.error('Gagal mengekstrak link:', err);
+                    return socket.emit('error', 'Gagal memproses link pendek. Coba copy link panjangnya langsung.');
+                }
+            }
+
+            // Validasi link panjang (wajib soundcloud.com/...)
+            const scRegex = /^(https?:\/\/)?(www\.)?soundcloud\.com\/.+\/.+$/i;
+            if (!scRegex.test(finalUrl)) {
+                return socket.emit('error', 'Format URL SoundCloud tidak dikenali!');
+            }
 
             socket.emit('info', 'Mengambil data lagu...');
 
-            // Pastikan Client ID selalu terhubung
             if (!isScdlConnected) {
                 await scdl.connect();
                 isScdlConnected = true;
             }
 
-            const trackInfo = await scdl.getInfo(url);
+            // Gunakan finalUrl yang sudah berupa link panjang
+            const trackInfo = await scdl.getInfo(finalUrl);
             const title = (trackInfo.title || 'SoundCloud_Track').replace(/[^a-zA-Z0-9_\-\s]/g, "");
             const fileName = `${title}_${Date.now()}.mp3`;
             const filePath = path.join(DOWNLOAD_DIR, fileName);
 
-            const stream = await scdl.download(url);
+            const stream = await scdl.download(finalUrl);
             const fileStream = fs.createWriteStream(filePath);
 
             const durationSec = (trackInfo.duration || 0) / 1000;
@@ -107,7 +132,7 @@ if (!url || !scRegex.test(url)) {
 
             stream.on('error', (err) => {
                 console.error('Stream error:', err);
-                socket.emit('error', 'Gagal memproses lagu (Kemungkinan terblokir SoundCloud).');
+                socket.emit('error', 'Gagal memproses lagu (Kemungkinan akses dibatasi).');
                 if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
             });
 
