@@ -39,7 +39,7 @@ io.on('connection', (socket) => {
             if (!/^https?:\/\//i.test(url)) url = 'https://' + url;
 
             // ==========================================
-            // CASE 1: SOUNDCLIUD DOWNLOADER
+            // CASE 1: SOUNDCLOUD DOWNLOADER
             // ==========================================
             if (url.includes('soundcloud.com') || url.includes('on.soundcloud.com')) {
                 socket.emit('info', 'Memproses link SoundCloud...');
@@ -103,12 +103,11 @@ io.on('connection', (socket) => {
 
             } 
             // ==========================================
-            // CASE 2: YOUTUBE MP3 CONVERTER (STABLE API BRIDGE)
+            // CASE 2: YOUTUBE MP3 (MULTI-INSTANCE FALLBACK)
             // ==========================================
             else if (url.includes('youtube.com') || url.includes('youtu.be')) {
                 socket.emit('info', 'Menghubungkan ke server YouTube...');
 
-                // Ekstrak Video ID dari URL YouTube
                 let videoId = '';
                 if (url.includes('youtu.be/')) {
                     videoId = url.split('youtu.be/')[1]?.split('?')[0];
@@ -120,18 +119,37 @@ io.on('connection', (socket) => {
                     return socket.emit('error', 'Link YouTube tidak valid.');
                 }
 
-                socket.emit('info', 'Mengonversi video ke MP3...');
-                socket.emit('progress', { progress: 40, speedMBps: "1.50", etaSec: "3", title: "YouTube Audio" });
+                socket.emit('info', 'Mencari jalur server stabil...');
+                socket.emit('progress', { progress: 30, speedMBps: "1.00", etaSec: "3", title: "YouTube Audio" });
 
-                // Menggunakan API pihak ketiga yang stabil untuk mengambil direct stream audio YouTube
-                const apiRes = await fetch(`https://pipedapi.kavin.rocks/streams/${videoId}`);
-                const apiData = await apiRes.json();
+                // Daftar server publik cadangan (Piped Instances) yang aman & aktif
+                const pipedInstances = [
+                    'https://pipedapi.kavin.rocks',
+                    'https://pipedapi.yt.privacydev.net',
+                    'https://pipedapi.adminforge.de',
+                    'https://api.piped.privacy.com.de'
+                ];
 
-                if (!apiData.audioStreams || apiData.audioStreams.length === 0) {
-                    return socket.emit('error', 'Gagal mengambil audio dari YouTube. Video mungkin dibatasi.');
+                let apiData = null;
+                for (const instance of pipedInstances) {
+                    try {
+                        const res = await fetch(`${instance}/streams/${videoId}`);
+                        if (res.ok) {
+                            const data = await res.json();
+                            if (data.audioStreams && data.audioStreams.length > 0) {
+                                apiData = data;
+                                break; // Berhenti mencari jika salah satu server berhasil merespons
+                            }
+                        }
+                    } catch (err) {
+                        console.log(`⚠️ Server ${instance} sibuk, mencoba server berikutnya...`);
+                    }
                 }
 
-                // Pilih kualitas audio terbaik yang berformat m4a/webm untuk dikonversi
+                if (!apiData || !apiData.audioStreams) {
+                    return socket.emit('error', 'Semua server YouTube sedang sibuk atau video dibatasi. Coba beberapa saat lagi.');
+                }
+
                 const audioStreamInfo = apiData.audioStreams.sort((a, b) => b.bitrate - a.bitrate)[0];
                 const audioUrl = audioStreamInfo.url;
                 
@@ -141,7 +159,6 @@ io.on('connection', (socket) => {
 
                 socket.emit('info', `Mengunduh: ${title}...`);
 
-                // Download stream audio langsung ke server kita
                 const audioRes = await fetch(audioUrl);
                 const fileStream = fs.createWriteStream(filePath);
                 
@@ -186,7 +203,7 @@ io.on('connection', (socket) => {
 
         } catch (error) {
             console.error('❌ Error:', error);
-            socket.emit('error', 'Gagal memproses media. Coba gunakan link YouTube yang lain.');
+            socket.emit('error', 'Gagal memproses media. Pastikan link publik.');
             if (filePath && fs.existsSync(filePath)) fs.unlinkSync(filePath);
         }
     });
@@ -210,5 +227,5 @@ app.get('/download-file/:filename', (req, res) => {
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
-    console.log(`🚀 Server Stabil aktif di port ${PORT}`);
+    console.log(`🚀 Server Multi-Instance aktif di port ${PORT}`);
 });
