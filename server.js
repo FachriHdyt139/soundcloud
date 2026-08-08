@@ -20,7 +20,7 @@ if (!fs.existsSync(DOWNLOAD_DIR)) {
 
 let totalDownloads = 1255;
 
-// API Key RapidAPI Anda yang sudah dimasukkan
+// API Key RapidAPI Anda
 const RAPID_API_KEY = process.env.RAPID_API_KEY || '4ae8cf984dmshddf06cb87ec7b8ep19e868jsna99694e67dd6';
 
 app.get('/api/stats', (req, res) => {
@@ -160,15 +160,25 @@ io.on('connection', (socket) => {
                 });
             }
             // ==========================================
-            // 3. INSTAGRAM & YOUTUBE (Fix Endpoint)
+            // 3. INSTAGRAM & YOUTUBE (Fix Parameter ID)
             // ==========================================
             else if (platform === 'instagram' || platform === 'youtube') {
                 socket.emit('info', `Menghubungkan ke API ${platform.toUpperCase()}...`);
                 
                 const apiHost = 'all-media-downloader4.p.rapidapi.com';
                 let endpointUrl = '';
+
                 if (platform === 'youtube') {
-                    endpointUrl = `https://${apiHost}/api/youtube/download?url=${encodeURIComponent(url)}`;
+                    let videoId = '';
+                    if (url.includes('youtu.be/')) {
+                        videoId = url.split('youtu.be/')[1]?.split('?')[0];
+                    } else if (url.includes('watch?v=')) {
+                        videoId = url.split('watch?v=')[1]?.split('&')[0];
+                    } else {
+                        videoId = url;
+                    }
+                    
+                    endpointUrl = `https://${apiHost}/api/youtube/download?id=${videoId}`;
                 } else {
                     endpointUrl = `https://${apiHost}/api/instagram/download?url=${encodeURIComponent(url)}`;
                 }
