@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Media Downloader - SoundCloud & TikTok</title>
     <link rel="stylesheet" href="style.css">
-    <!-- FontAwesome untuk Icon -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
 <body>
@@ -16,6 +15,7 @@
                 <span class="badge">PRO</span>
             </div>
             <h1>MEDIA DOWNLOADER</h1>
+            <p class="subtitle">Enterprise High-Speed Media Downloader</p>
             <div class="stats">
                 <i class="fa-solid fa-fire"></i> Total Unduhan: <span id="total-downloads">1256</span>
             </div>
@@ -23,17 +23,15 @@
 
         <main>
             <div class="card">
-                <!-- Pilihan Platform (Hanya SC dan TikTok) -->
                 <div class="platform-tabs">
                     <button class="tab-btn active" data-platform="soundcloud">
-                        <i class="fa-brands fa-soundcloud"></i> SC
+                        <i class="fa-brands fa-soundcloud"></i> SoundCloud
                     </button>
                     <button class="tab-btn" data-platform="tiktok">
                         <i class="fa-brands fa-tiktok"></i> TikTok
                     </button>
                 </div>
 
-                <!-- Input Form -->
                 <div class="input-group">
                     <label id="input-label" for="url-input">Tempel Link SOUNDCLOUD:</label>
                     <div class="input-wrapper">
@@ -42,40 +40,56 @@
                     </div>
                 </div>
 
-                <!-- Tombol Eksekusi -->
+                <div class="input-group" id="format-group">
+                    <label for="format-select"><i class="fa-solid fa-sliders"></i> Format Output:</label>
+                    <select id="format-select" class="format-select">
+                        <option value="audio">Audio (MP3)</option>
+                        <option value="video">Video (Tanpa Watermark)</option>
+                    </select>
+                </div>
+
                 <button id="download-btn" class="action-btn">
                     <i class="fa-solid fa-rocket"></i> Unduh Sekarang
                 </button>
 
-                <!-- Status / Progress Box -->
                 <div id="status-box" class="status-box hidden">
                     <div class="loader-spinner"></div>
                     <p id="status-text">Memproses...</p>
-                    <div class="progress-bar-container hidden" id="progress-container">
+                    <div class="progress-bar-container" id="progress-container">
                         <div class="progress-bar" id="progress-bar"></div>
                         <span id="progress-text">0%</span>
                     </div>
-                    <div class="download-info hidden" id="download-info">
+                    <div class="download-info" id="download-info">
                         <p>Kecepatan: <span id="speed">0.00</span> MB/s</p>
                         <p>ETA: <span id="eta">0s</span></p>
                     </div>
                 </div>
+
+                <div id="preview-box" class="preview-box hidden">
+                    <div class="preview-content">
+                        <img id="preview-img" src="" alt="Thumbnail">
+                        <div class="preview-details">
+                            <span class="preview-title-label">JUDUL MEDIA:</span>
+                            <h4 id="preview-title">-</h4>
+                        </div>
+                    </div>
+                    <a id="download-link-btn" href="#" class="save-btn" download>
+                        <i class="fa-solid fa-download"></i> Simpan ke Perangkat
+                    </a>
+                </div>
             </div>
 
-            <!-- Riwayat Unduhan Lokal -->
-            <div class="history-card">
-                <div class="history-header">
-                    <h3><i class="fa-solid fa-clock-rotate-left"></i> Riwayat Unduhan Lokal</h3>
-                    <button id="clear-history">Hapus</button>
+            <div class="footer-info-card">
+                <div class="footer-info-item">
+                    <i class="fa-solid fa-shield-halved"></i> 100% Aman & Tanpa Iklan
                 </div>
-                <div id="history-list" class="history-list">
-                    <p class="empty-history">Belum ada riwayat unduhan.</p>
+                <div class="footer-info-tip">
+                    <i class="fa-solid fa-lightbulb"></i> <strong>Tips:</strong> Cukup tempel link, sistem otomatis mendeteksi platform dan menampilkan preview secara instan.
                 </div>
             </div>
         </main>
     </div>
 
-    <!-- Socket.io Client -->
     <script src="/socket.io/socket.io.js"></script>
     <script src="script.js"></script>
 </body>
