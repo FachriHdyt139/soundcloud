@@ -1,7 +1,7 @@
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
-const scdl = require('soundcloud-downloader').default;
+const SoundCloud = require("soundcloud-scraper");
 const fs = require('fs');
 const path = require('path');
 const cors = require('cors');
@@ -9,6 +9,7 @@ const cors = require('cors');
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
+const sc = new SoundCloud.Client();
 
 app.use(cors());
 app.use(express.static(path.join(__dirname, 'public')));
@@ -31,13 +32,7 @@ io.on('connection', (socket) => {
         let filePath = '';
 
         try {
-            if (!url) {
-                return socket.emit('error', 'URL tidak boleh kosong!');
-            }
-
-            if (!/(https:\/\/|www\.)/.test(url)) {
-                return socket.emit('error', 'URL tidak valid!');
-            }
+            if (!url) return socket.emit('error', 'URL tidak boleh kosong!');
 
             // ==========================================
             // 1. SOUNDCLOUD
@@ -45,23 +40,13 @@ io.on('connection', (socket) => {
             if (platform === 'soundcloud') {
                 socket.emit('info', 'Memproses link SoundCloud...');
                 
-                let resolvedUrl = url;
-                if (url.includes('on.soundcloud.com')) {
-                    try {
-                        const response = await fetch(url, { redirect: 'follow' });
-                        resolvedUrl = response.url;
-                    } catch (e) {
-                        console.error('Gagal resolve redirect:', e);
-                    }
-                }
-
-                const trackInfo = await scdl.getInfo(resolvedUrl).catch(() => null);
-                if (!trackInfo) {
+                const songInfo = await sc.getSongInfo(url).catch(() => null);
+                if (!songInfo) {
                     return socket.emit('error', 'Gagal memproses link SoundCloud.');
                 }
 
-                const title = (trackInfo.title || 'SoundCloud Audio').substring(0, 40).trim();
-                const coverUrl = trackInfo.artwork_url || 'https://images.unsplash.com/photo-1611162617474-5b21e879e113';
+                const title = (songInfo.title || 'SoundCloud Audio').substring(0, 40).trim();
+                const coverUrl = songInfo.thumbnail || 'https://images.unsplash.com/photo-1611162617474-5b21e879e113';
 
                 socket.emit('preview', { title, coverUrl });
 
@@ -70,23 +55,20 @@ io.on('connection', (socket) => {
                 filePath = path.join(DOWNLOAD_DIR, fileName);
 
                 socket.emit('info', 'Mengunduh file SoundCloud...');
-                const stream = await scdl.download(resolvedUrl);
+                const stream = await sc.download(url);
                 const fileStream = fs.createWriteStream(filePath);
                 stream.pipe(fileStream);
 
                 let downloaded = 0;
                 const startTime = Date.now();
-                const totalLength = trackInfo.duration || 10000000;
 
                 stream.on('data', (chunk) => {
                     downloaded += chunk.length;
                     const elapsedTime = (Date.now() - startTime) / 1000 || 0.001;
                     const speedBps = downloaded / elapsedTime;
                     const speedMBps = (speedBps / (1024 * 1024)).toFixed(2);
-                    const progress = Math.min((downloaded / (totalLength * 1000)) * 100, 99).toFixed(1);
-                    const etaSec = ((totalLength - downloaded) / speedBps).toFixed(0);
-
-                    socket.emit('progress', { progress, speedMBps, etaSec, title });
+                    
+                    socket.emit('progress', { progress: 50, speedMBps, etaSec: 5, title });
                 });
 
                 stream.on('end', () => {
@@ -122,9 +104,7 @@ io.on('connection', (socket) => {
                 socket.emit('info', 'Mengunduh file TikTok...');
                 const mediaRes = await fetch(downloadSourceUrl);
                 
-                if (!mediaRes.ok) {
-                    return socket.emit('error', 'Gagal menyambung ke server video.');
-                }
+                if (!mediaRes.ok) return socket.emit('error', 'Gagal menyambung ke server video.');
 
                 const fileStream = fs.createWriteStream(filePath);
                 const totalLength = parseInt(mediaRes.headers.get('content-length') || '10000000');
